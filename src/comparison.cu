@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include "matrix_multiply_shared.cuh"
 #include "matrix_multiply_naive.cuh"
-#include <cuda_runtime.h>
 
 int main(int argc, char *argv[]) {
     if (argc != 5 || strcmp(argv[1], "-i") != 0) {
@@ -24,52 +23,15 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < K * N; i++) B[i] = (float)(rand() % 100) / 100.0f;
     
     printf("\nMatrix Multiplication Performance Comparison:\n");
-    printf("%-12s %-20s %-20s %-20s %-20s %-20s %-20s %-20s %-20s\n", "Block Size", "Shared TFLOPS", "Shared Time (ms)", "Naive TFLOPS", "Naive Time (ms)", "Theoretical Warps", "Achieved Warps", "Theoretical Occupancy", "Achieved Occupancy");
+    printf("%-12s %-20s %-20s %-20s %-20s\n", "Block Size", "Shared TFLOPS", "Shared Time (ms)", "Naive TFLOPS", "Naive Time (ms)");
     
     for (int i = 0; i < numBlocks; i++) {
-        int blockSize = blockSizes[i];
-        int numBlocksPerSM;
+        int BLOCK_SIZE = blockSizes[i];
+        float execTimeShared = 0.0f, execTimeNaive = 0.0f;
+        double tflopsShared = matrixMultiplyShared(A, B, C, M, N, K, BLOCK_SIZE, &execTimeShared);
+        double tflopsNaive = matrixMultiplyNaive(A, B, C, M, N, K, BLOCK_SIZE, &execTimeNaive);
         
-        cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSM, matrixMultiplyShared, blockSize * blockSize, 0);
-        
-        int maxThreadsPerSM;
-        cudaDeviceProp prop;
-        cudaGetDeviceProperties(&prop, 0);
-        maxThreadsPerSM = prop.maxThreadsPerMultiProcessor;
-        int warpSize = prop.warpSize;
-        
-        int theoreticalWarps = maxThreadsPerSM / warpSize;
-        int achievedWarps = (blockSize * blockSize * numBlocksPerSM) / warpSize;
-        float theoreticalOccupancy = (float)achievedWarps / theoreticalWarps * 100.0f;
-        float achievedOccupancy = (float)numBlocksPerSM / (prop.maxThreadsPerMultiProcessor / (blockSize * blockSize)) * 100.0f;
-        
-        // Timing and TFLOPS Calculation
-        cudaEvent_t start, stop;
-        float milliseconds;
-        
-        cudaEventCreate(&start);
-        cudaEventCreate(&stop);
-        
-        // Shared Memory Kernel Execution
-        float sharedTime = 0.0f;
-double sharedTflops = 0.0;
-        dim3 gridDim((N + blockSize - 1) / blockSize, (M + blockSize - 1) / blockSize);
-        dim3 blockDim(blockSize, blockSize);
-        sharedTflops = matrixMultiplyShared(A, B, C, M, K, N, blockSize, &sharedTime);
-        
-        // Naive Kernel Execution
-        float naiveTime = 0.0f;
-double naiveTflops = 0.0;
-        dim3 gridDim_naive((N + blockSize - 1) / blockSize, (M + blockSize - 1) / blockSize);
-        dim3 blockDim_naive(blockSize, blockSize);
-        naiveTflops = matrixMultiplyNaive(A, B, C, M, K, N, blockSize, &naiveTime);
-        
-        printf("%-12d %-20.3f %-20.3f %-20.3f %-20.3f %-20d %-20d %-20.2f %-20.2f\n", 
-               blockSize, sharedTflops, sharedTime, naiveTflops, naiveTime, 
-               theoreticalWarps, achievedWarps, theoreticalOccupancy, achievedOccupancy);
-        
-        cudaEventDestroy(start);
-        cudaEventDestroy(stop);
+        printf("%-12d %-20.2f %-20.2f %-20.2f %-20.2f\n", BLOCK_SIZE, tflopsShared, execTimeShared, tflopsNaive, execTimeNaive);
     }
     
     free(A);
