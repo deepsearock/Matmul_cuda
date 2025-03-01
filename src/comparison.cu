@@ -9,9 +9,9 @@ int main(int argc, char *argv[]) {
         return -1;
     }
     
-    int M = atoi(argv[1]);
-    int K = atoi(argv[2]);
-    int N = atoi(argv[3]);
+    int M = atoi(argv[2]);
+    int K = atoi(argv[3]);
+    int N = atoi(argv[4]);
     int blockSizes[] = {8, 16, 32};
     int numBlocks = sizeof(blockSizes) / sizeof(blockSizes[0]);
     
