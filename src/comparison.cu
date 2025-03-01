@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < K * N; i++) B[i] = (float)(rand() % 100) / 100.0f;
     
     printf("Matrix Multiplication Performance Comparison:\n");
-    printf("%-12s %-20s %-20s %-20s %-20s %-20s %-20s %-20s %-20s", "Block Size", "Shared TFLOPS", "Shared Time (ms)", "Naive TFLOPS", "Naive Time (ms)", "Theor. Warps", "Ach. Warps", "Theor. Occ. (%)", "Ach. Occ. (%)");
+    printf("%-12s %-20s %-20s %-20s %-20s %-20s %-20s %-20s %-20s\n", "Block Size", "Shared TFLOPS", "Shared Time (ms)", "Naive TFLOPS", "Naive Time (ms)", "Theor. Warps", "Ach. Warps", "Theor. Occ. (%)", "Ach. Occ. (%)");
     printf("%-12s %-20s %-20s %-20s %-20s\n", "Block Size", "Shared TFLOPS", "Shared Time (ms)", "Naive TFLOPS", "Naive Time (ms)");
     
     for (int i = 0; i < numBlocks; i++) {
@@ -32,10 +32,21 @@ int main(int argc, char *argv[]) {
         double tflopsShared = matrixMultiplyShared(A, B, C, M, N, K, BLOCK_SIZE, &execTimeShared);
         double tflopsNaive = matrixMultiplyNaive(A, B, C, M, N, K, BLOCK_SIZE, &execTimeNaive);
         
-                int theoreticalWarps = 48; // Placeholder value
-        double achievedWarps = 46.87; // Placeholder value
-        double theoreticalOccupancy = 75.0; // Placeholder value
-        double achievedOccupancy = 73.23; // Placeholder value
+        int maxThreadsPerSM;
+        int warpSize;
+        cudaDeviceGetAttribute(&maxThreadsPerSM, cudaDevAttrMaxThreadsPerMultiProcessor, 0);
+        cudaDeviceGetAttribute(&warpSize, cudaDevAttrWarpSize, 0);
+        int maxWarpsPerSM = maxThreadsPerSM / warpSize;
+        int theoreticalWarps = maxWarpsPerSM;
+                int activeWarpsPerSM;
+        cudaDeviceGetAttribute(&activeWarpsPerSM, cudaDevAttrMaxThreadsPerMultiProcessor, 0);
+        double achievedWarps = (double)activeWarpsPerSM / warpSize;
+                int maxBlocksPerSM;
+        cudaDeviceGetAttribute(&maxBlocksPerSM, cudaDevAttrMaxBlocksPerMultiProcessor, 0);
+        double theoreticalOccupancy = (double)maxBlocksPerSM / maxWarpsPerSM * 100.0;
+                int achievedActiveThreads;
+        cudaOccupancyMaxActiveBlocksPerMultiprocessor(&achievedActiveThreads, matrixMultiplyShared, BLOCK_SIZE * BLOCK_SIZE, 0);
+        double achievedOccupancy = (double)achievedActiveThreads / maxBlocksPerSM * 100.0;
         
         printf("%-12d %-20.2f %-20.2f %-20.2f %-20.2f %-20d %-20.2f %-20.2f %-20.2f", BLOCK_SIZE, tflopsShared, execTimeShared, tflopsNaive, execTimeNaive, theoreticalWarps, achievedWarps, theoreticalOccupancy, achievedOccupancy);
     }
