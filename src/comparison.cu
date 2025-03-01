@@ -44,13 +44,15 @@ int main(int argc, char *argv[]) {
         float achievedOccupancy = (float)numBlocksPerSM / (prop.maxThreadsPerMultiProcessor / (blockSize * blockSize)) * 100.0f;
 
         // Shared Memory Kernel Execution
-        float sharedTime = 0.0f, sharedTflops = 0.0f;
+        float sharedTime = 0.0f
+        double sharedTflops = 0.0f;
         dim3 gridDim((N + blockSize - 1) / blockSize, (M + blockSize - 1) / blockSize);
         dim3 blockDim(blockSize, blockSize);
         sharedTflops = matrixMultiplyShared(A, B, C, M, K, N, blockSize, &sharedTime);
         
         // Naive Kernel Execution
-        float naiveTime = 0.0f, naiveTflops = 0.0f;
+        float naiveTime = 0.0f
+        double naiveTflops = 0.0f;
         dim3 gridDim_naive((N + blockSize - 1) / blockSize, (M + blockSize - 1) / blockSize);
         dim3 blockDim_naive(blockSize, blockSize);
         naiveTflops = matrixMultiplyNaive(A, B, C, M, K, N, blockSize, &naiveTime)
