@@ -119,7 +119,7 @@ int main(int argc, char *argv[]) {
     
     cudaDeviceProp prop;
 cudaGetDeviceProperties(&prop, 0);
-printf("GPU: %s, Compute Capability: %d.%d, Global Memory: %.2f GB, Shared Memory per Block: %d KB, Max Threads per Block: %d", prop.name, prop.major, prop.minor, prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0), (int)(prop.sharedMemPerBlock / 1024), (int)prop.maxThreadsPerBlock);
+printf("GPU: %s, Compute Capability: %d.%d, Global Memory: %.2f GB, Shared Memory per Block: %d KB, Max Threads per Block: %d /n/n", prop.name, prop.major, prop.minor, prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0), (int)(prop.sharedMemPerBlock / 1024), (int)prop.maxThreadsPerBlock);
 
 int blockSizes[] = {8, 16, 32};
     int numBlocks = sizeof(blockSizes) / sizeof(blockSizes[0]);
