@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "matrix_multiply_shared.cuh"
 #include "matrix_multiply_naive.cuh"
+#include <cuda_runtime.h>
 
 int main(int argc, char *argv[]) {
     if (argc != 5 || strcmp(argv[1], "-i") != 0) {
@@ -23,15 +24,26 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < K * N; i++) B[i] = (float)(rand() % 100) / 100.0f;
     
     printf("\nMatrix Multiplication Performance Comparison:\n");
-    printf("%-12s %-20s %-20s %-20s %-20s\n", "Block Size", "Shared TFLOPS", "Shared Time (ms)", "Naive TFLOPS", "Naive Time (ms)");
+    printf("%-12s %-20s %-20s %-20s %-20s %-20s %-20s %-20s %-20s\n", "Block Size", "Shared TFLOPS", "Shared Time (ms)", "Naive TFLOPS", "Naive Time (ms)", "Theoretical Warps", "Achieved Warps", "Theoretical Occupancy", "Achieved Occupancy");
     
     for (int i = 0; i < numBlocks; i++) {
-        int BLOCK_SIZE = blockSizes[i];
-        float execTimeShared = 0.0f, execTimeNaive = 0.0f;
-        double tflopsShared = matrixMultiplyShared(A, B, C, M, N, K, BLOCK_SIZE, &execTimeShared);
-        double tflopsNaive = matrixMultiplyNaive(A, B, C, M, N, K, BLOCK_SIZE, &execTimeNaive);
+        int blockSize = blockSizes[i];
+        int numBlocksPerSM;
         
-        printf("%-12d %-20.2f %-20.2f %-20.2f %-20.2f\n", BLOCK_SIZE, tflopsShared, execTimeShared, tflopsNaive, execTimeNaive);
+        cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSM, matrixMultiplyShared, blockSize * blockSize, 0);
+        
+        int maxThreadsPerSM;
+        cudaDeviceProp prop;
+        cudaGetDeviceProperties(&prop, 0);
+        maxThreadsPerSM = prop.maxThreadsPerMultiProcessor;
+        int warpSize = prop.warpSize;
+        
+        int theoreticalWarps = maxThreadsPerSM / warpSize;
+        int achievedWarps = (blockSize * blockSize * numBlocksPerSM) / warpSize;
+        float theoreticalOccupancy = (float)achievedWarps / theoreticalWarps * 100.0f;
+        float achievedOccupancy = (float)numBlocksPerSM / (prop.maxThreadsPerMultiProcessor / (blockSize * blockSize)) * 100.0f;
+        
+        printf("%-12d %-20.3f %-20.3f %-20.3f %-20.3f %-20d %-20d %-20.2f %-20.2f\n", blockSize, sharedTflops, sharedTime, naiveTflops, naiveTime, theoreticalWarps, achievedWarps, theoreticalOccupancy, achievedOccupancy);
     }
     
     free(A);
