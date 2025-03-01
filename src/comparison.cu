@@ -9,20 +9,8 @@
 int main(int argc, char *argv[]) {
     cudaDeviceProp prop;
     cudaGetDeviceProperties(&prop, 0);
-    printf("GPU Specifications:");
-    printf("Device Name: %s", prop.name);
-    printf("Compute Capability: %d.%d", prop.major, prop.minor);
-    printf("Total Global Memory: %.2f GB", prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0));
-    printf("Shared Memory per Block: %d KB", prop.sharedMemPerBlock / 1024);
-    printf("Max Threads per Block: %d", prop.maxThreadsPerBlock);
-    printf("Max Threads per SM: %d", prop.maxThreadsPerMultiProcessor);
-    printf("Warp Size: %d", prop.warpSize);
-    printf("Max Warps per SM: %d", prop.maxThreadsPerMultiProcessor / prop.warpSize);
-    printf("Max Blocks per SM: %d", prop.multiProcessorCount);
-    if (argc != 5 || strcmp(argv[1], "-i") != 0) {
-        fprintf(stderr, "Usage: %s -i <rowDimA> <colDimA> <colDimB>\n", argv[0]);
-        return -1;
-    }
+    cudaGetDeviceProperties(&prop, 0);
+    printf("GPU: %s, Compute Capability: %d.%d, Global Memory: %.2f GB, Shared Memory per Block: %d KB, Max Threads per Block: %d \n\n", prop.name, prop.major, prop.minor, prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0), (int)(prop.sharedMemPerBlock / 1024), (int)prop.maxThreadsPerBlock);
     
     int M = atoi(argv[2]);
     int K = atoi(argv[3]);
