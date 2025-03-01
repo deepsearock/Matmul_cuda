@@ -140,13 +140,13 @@ int blockSizes[] = {8, 16, 32};
         int BLOCK_SIZE = blockSizes[b];
         double totalTflops = 0.0;
         float totalTime = 0.0;
-        int runs = 100;
-        
-                double errorSum = 0.0;
+        int runs = 10;
+        double errorSum = 0.0;
+
         for (int i = 0; i < runs; i++) {
             float execTime = 0.0f;
             double tflops = matrixMultiply(A, B, C, M, N, K, BLOCK_SIZE, &execTime);
-                        totalTflops += tflops;
+            totalTflops += tflops;
             for (int j = 0; j < M * N; j++) {
                 double expected = 0.0;
                 for (int k = 0; k < K; k++) {
@@ -158,11 +158,11 @@ int blockSizes[] = {8, 16, 32};
             totalTime += execTime;
         }
         
-                double avgError = errorSum / (M * N * runs);
+        double avgError = errorSum / (M * N * runs);
         totalError += avgError;
         double avgTflops = totalTflops / runs;
         double avgTime = totalTime / runs;
-                printf("Block Size: %d, Average Execution Time: %f ms, Average Performance: %f TFLOPS, Average Error Rate: %e \n", BLOCK_SIZE, avgTime, avgTflops, avgError);
+        printf("Block Size: %d, Average Execution Time: %f ms, Average Performance: %f TFLOPS, Average Error Rate: %e \n", BLOCK_SIZE, avgTime, avgTflops, avgError);
     }
     
     free(A);
