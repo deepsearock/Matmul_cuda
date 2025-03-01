@@ -44,21 +44,13 @@ int main(int argc, char *argv[]) {
         float achievedOccupancy = (float)numBlocksPerSM / (prop.maxThreadsPerMultiProcessor / (blockSize * blockSize)) * 100.0f;
 
         // Shared Memory Kernel Execution
-        float sharedTime;
-        cudaEventRecord(start);
+        float sharedTime = 0.0f;
         matrixMultiplyShared(A, B, C, M, K, N, blockSize, &sharedTime);
-        cudaEventRecord(stop);
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&milliseconds, start, stop);
         float sharedTflops = (2.0f * M * K * N) / (sharedTime * 1.0e6);
         
         // Naive Kernel Execution
-        float naiveTime;
-        cudaEventRecord(start);
+        float naiveTime = 0.0f;
         matrixMultiplyNaive(A, B, C, M, K, N, blockSize, &naiveTime);
-        cudaEventRecord(stop);
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&milliseconds, start, stop);
         float naiveTflops = (2.0f * M * K * N) / (naiveTime * 1.0e6);
         
         printf("%-12d %-20.3f %-20.3f %-20.3f %-20.3f %-20d %-20d %-20.2f %-20.2f\n", blockSize, sharedTflops, sharedTime, naiveTflops, naiveTime, theoreticalWarps, achievedWarps, theoreticalOccupancy, achievedOccupancy);
