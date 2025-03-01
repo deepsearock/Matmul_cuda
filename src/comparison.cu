@@ -51,6 +51,7 @@ int main(int argc, char *argv[]) {
         cudaEventCreate(&stop);
         
         // Shared Memory Kernel Execution
+        float sharedTime;
         cudaEventRecord(start);
         matrixMultiplyShared(A, B, C, M, K, N, blockSize, &sharedTime);
         cudaEventRecord(stop);
@@ -60,6 +61,7 @@ int main(int argc, char *argv[]) {
         float sharedTflops = (2.0f * M * K * N) / (sharedTime * 1.0e6);
         
         // Naive Kernel Execution
+        float naiveTime;
         cudaEventRecord(start);
         matrixMultiplyNaive(A, B, C, M, K, N, blockSize, &naiveTime);
         cudaEventRecord(stop);
