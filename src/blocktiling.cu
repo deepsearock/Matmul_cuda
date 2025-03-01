@@ -162,7 +162,7 @@ int blockSizes[] = {8, 16, 32, 64, 128};
         totalError += avgError;
         double avgTflops = totalTflops / runs;
         double avgTime = totalTime / runs;
-                printf("Block Size: %d, Average Execution Time: %f ms, Average Performance: %f TFLOPS, Average Error Rate: %e", BLOCK_SIZE, avgTime, avgTflops, avgError);
+                printf("Block Size: %d, Average Execution Time: %f ms, Average Performance: %f TFLOPS, Average Error Rate: %e \n", BLOCK_SIZE, avgTime, avgTflops, avgError);
     }
     
     free(A);
