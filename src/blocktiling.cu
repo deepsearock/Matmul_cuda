@@ -115,7 +115,7 @@ int main(int argc, char *argv[]) {
     int K = atoi(argv[3]); // Columns of A, rows of B
     int N = atoi(argv[4]); // Columns of B
     
-    int BLOCK_SIZE = 16; // Default block size
+    int BLOCK_SIZE = 32; // Default block size
     
     float *A = (float *)malloc(M * K * sizeof(float));
     float *B = (float *)malloc(K * N * sizeof(float));
