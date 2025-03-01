@@ -22,9 +22,7 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < M * K; i++) A[i] = (float)(rand() % 100) / 100.0f;
     for (int i = 0; i < K * N; i++) B[i] = (float)(rand() % 100) / 100.0f;
     
-    printf("
-Matrix Multiplication Performance Comparison:
-");
+    printf("Matrix Multiplication Performance Comparison:");
     printf("%-12s %-20s %-20s %-20s %-20s %-20s %-20s %-20s %-20s", "Block Size", "Shared TFLOPS", "Shared Time (ms)", "Naive TFLOPS", "Naive Time (ms)", "Theor. Warps", "Ach. Warps", "Theor. Occ. (%)", "Ach. Occ. (%)");
     printf("%-12s %-20s %-20s %-20s %-20s\n", "Block Size", "Shared TFLOPS", "Shared Time (ms)", "Naive TFLOPS", "Naive Time (ms)");
     
