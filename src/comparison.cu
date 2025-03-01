@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <cuda_runtime_api.h>
 #include "matrix_multiply_shared.cuh"
 #include "matrix_multiply_naive.cuh"
 
