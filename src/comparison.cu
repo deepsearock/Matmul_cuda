@@ -43,31 +43,22 @@ int main(int argc, char *argv[]) {
         float theoreticalOccupancy = (float)achievedWarps / theoreticalWarps * 100.0f;
         float achievedOccupancy = (float)numBlocksPerSM / (prop.maxThreadsPerMultiProcessor / (blockSize * blockSize)) * 100.0f;
 
-        // Timing and TFLOPS Calculation
-        cudaEvent_t start, stop;
-        float milliseconds;
-        
-        cudaEventCreate(&start);
-        cudaEventCreate(&stop);
-        
         // Shared Memory Kernel Execution
         float sharedTime;
         cudaEventRecord(start);
-        matrixMultiplyShared(A, B, C, M, K, N, blockSize, sharedTime);
+        matrixMultiplyShared(A, B, C, M, K, N, blockSize, &sharedTime);
         cudaEventRecord(stop);
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&milliseconds, start, stop);
-        float sharedTime = milliseconds;
         float sharedTflops = (2.0f * M * K * N) / (sharedTime * 1.0e6);
         
         // Naive Kernel Execution
         float naiveTime;
         cudaEventRecord(start);
-        matrixMultiplyNaive(A, B, C, M, K, N, blockSize, naiveTime);
+        matrixMultiplyNaive(A, B, C, M, K, N, blockSize, &naiveTime);
         cudaEventRecord(stop);
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&milliseconds, start, stop);
-        float naiveTime = milliseconds;
         float naiveTflops = (2.0f * M * K * N) / (naiveTime * 1.0e6);
         
         printf("%-12d %-20.3f %-20.3f %-20.3f %-20.3f %-20d %-20d %-20.2f %-20.2f\n", blockSize, sharedTflops, sharedTime, naiveTflops, naiveTime, theoreticalWarps, achievedWarps, theoreticalOccupancy, achievedOccupancy);
