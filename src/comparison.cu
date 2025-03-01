@@ -39,13 +39,15 @@ int main(int argc, char *argv[]) {
         cudaDeviceGetAttribute(&warpSize, cudaDevAttrWarpSize, 0);
         int maxWarpsPerSM = maxThreadsPerSM / warpSize;
         int theoreticalWarps = maxWarpsPerSM;
-                int activeWarpsPerSM;
+        int activeWarpsPerSM;
         cudaDeviceGetAttribute(&activeWarpsPerSM, cudaDevAttrMaxThreadsPerMultiProcessor, 0);
         double achievedWarps = (double)activeWarpsPerSM / warpSize;
-                int maxBlocksPerSM;
-        cudaDeviceGetAttribute(&maxBlocksPerSM, cudaDevAttrMaxBlocksPerMultiProcessor, 0);
-        double theoreticalOccupancy = (double)maxBlocksPerSM / maxWarpsPerSM * 100.0;
-                int achievedActiveThreads;
+        int minGridSize;
+        int blockSize;
+        cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMultiplyShared, 0, 0);
+        int maxBlocksPerSM = minGridSize;
+        double theoreticalOccupancy = ((double)maxBlocksPerSM * BLOCK_SIZE * BLOCK_SIZE) / maxThreadsPerSM * 100.0;
+        int achievedActiveThreads;
         cudaOccupancyMaxActiveBlocksPerMultiprocessor(&achievedActiveThreads, matrixMultiplyShared, BLOCK_SIZE * BLOCK_SIZE, 0);
         double achievedOccupancy = (double)achievedActiveThreads / maxBlocksPerSM * 100.0;
         
