@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
 
 // Kernel for matrix multiplication using shared memory and tiling
 __global__ void matrixMulShared(float *A, float *B, float *C, int M, int N, int K, int BLOCK_SIZE) {
@@ -74,6 +75,7 @@ double matrixMultiply(float *A, float *B, float *C, int M, int N, int K, int BLO
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
     dim3 dimGrid((N + BLOCK_SIZE - 1) / BLOCK_SIZE, (M + BLOCK_SIZE - 1) / BLOCK_SIZE);
     int sharedMemSize = 2 * BLOCK_SIZE * BLOCK_SIZE * sizeof(float);
+        
     
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -103,6 +105,8 @@ double matrixMultiply(float *A, float *B, float *C, int M, int N, int K, int BLO
     return tflops;
 }
 
+
+
 int main(int argc, char *argv[]) {
     if (argc != 5 || strcmp(argv[1], "-i") != 0) {
         fprintf(stderr, "Usage: %s -i <rowDimA> <colDimA> <colDimB>\n", argv[0]);
@@ -113,7 +117,14 @@ int main(int argc, char *argv[]) {
     int K = atoi(argv[3]); // Columns of A, rows of B
     int N = atoi(argv[4]); // Columns of B
     
-    int blockSizes[] = {8, 16, 32, 64, 128};
+    cudaDeviceProp prop;
+cudaGetDeviceProperties(&prop, 0);
+printf("GPU: %s, Compute Capability: %d.%d, Global Memory: %.2f GB, Shared Memory per Block: %d KB, Max Threads per Block: %d
+", 
+       prop.name, prop.major, prop.minor, prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0), 
+       prop.sharedMemPerBlock / 1024, prop.maxThreadsPerBlock);
+
+int blockSizes[] = {8, 16, 32, 64, 128};
     int numBlocks = sizeof(blockSizes) / sizeof(blockSizes[0]);
     
     float *A = (float *)malloc(M * K * sizeof(float));
