@@ -44,16 +44,16 @@ int main(int argc, char *argv[]) {
         float achievedOccupancy = (float)numBlocksPerSM / (prop.maxThreadsPerMultiProcessor / (blockSize * blockSize)) * 100.0f;
 
         // Shared Memory Kernel Execution
-        float sharedTime = 0.0f;
-        dim3 gridDim_shared((N + blockSize - 1) / blockSize, (M + blockSize - 1) / blockSize);
-        dim3 blockDim_shared(blockSize, blockSize);
-        double sharedTflops = matrixMultiplyShared<<<gridDim_shared, blockDim_shared>>>(A, B, C, M, K, N, blockSize, &sharedTime);
+        float sharedTime = 0.0f, sharedTflops = 0.0f;
+        dim3 gridDim((N + blockSize - 1) / blockSize, (M + blockSize - 1) / blockSize);
+        dim3 blockDim(blockSize, blockSize);
+        sharedTflops = matrixMultiplyShared(A, B, C, M, K, N, blockSize, &sharedTime);
         
         // Naive Kernel Execution
-        float naiveTime = 0.0f;
+        float naiveTime = 0.0f, naiveTflops = 0.0f;
         dim3 gridDim_naive((N + blockSize - 1) / blockSize, (M + blockSize - 1) / blockSize);
         dim3 blockDim_naive(blockSize, blockSize);
-        double naiveTflops = matrixMultiplyNaive<<<gridDim_naive, blockDim_naive>>>(A, B, C, M, K, N, blockSize, &naiveTime);
+        naiveTflops = matrixMultiplyNaive(A, B, C, M, K, N, blockSize, &naiveTime)
         
         printf("%-12d %-20.3f %-20.3f %-20.3f %-20.3f %-20d %-20d %-20.2f %-20.2f\n", blockSize, sharedTflops, sharedTime, naiveTflops, naiveTime, theoreticalWarps, achievedWarps, theoreticalOccupancy, achievedOccupancy);
     }
