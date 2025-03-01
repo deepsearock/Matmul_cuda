@@ -3,6 +3,8 @@
 
 #include <cuda_runtime.h>
 #include <iostream>
+#include <chrono>
+#include <functional>
 
 #define checkCudaErrors(val) checkCuda((val), #val, __FILE__, __LINE__)
 
@@ -29,18 +31,25 @@ inline void freeDeviceMemory(float *d_A, float *d_B, float *d_C) {
 
 // Function to measure execution time and calculate TFLOPS
 inline std::pair<double, double> measurePerformance(std::function<void()> kernelLaunch, int M, int N, int K) {
+    // Record start time
     auto start = std::chrono::high_resolution_clock::now();
+    
+    // Launch the kernel
     kernelLaunch();
+    
+    // Synchronize device and record end time
     checkCudaErrors(cudaDeviceSynchronize());
     auto end = std::chrono::high_resolution_clock::now();
 
+    // Calculate the duration in milliseconds
     std::chrono::duration<double, std::milli> duration = end - start;
     double timeMs = duration.count();
 
-    double numOps = 2.0 * M * N * K; // Floating point operations
+    // Calculate floating-point operations and performance in TFLOPS
+    double numOps = 2.0 * M * N * K; // Floating point operations (for matrix multiplication)
     double tflops = (numOps / (timeMs * 1e9));
 
-    return {tflops, timeMs};
+    return {tflops, timeMs};  // Return the performance and execution time
 }
 
-#endif 
+#endif // UTILS_CUH

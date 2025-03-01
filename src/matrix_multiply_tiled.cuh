@@ -10,9 +10,8 @@
 
 // Tiled CUDA kernel for matrix multiplication using shared memory
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K, int tileSize) {
-    // Allocate shared memory for the tiles of A and B
-    __shared__ float tileA[tileSize][tileSize];
-    __shared__ float tileB[tileSize][tileSize];
+    __shared__ float tileA[tileSize][tileSize]; // Shared memory for A
+    __shared__ float tileB[tileSize][tileSize]; // Shared memory for B
 
     int row = blockIdx.y * tileSize + threadIdx.y;  // Row index of the C matrix
     int col = blockIdx.x * tileSize + threadIdx.x;  // Column index of the C matrix
@@ -20,7 +19,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
 
     // Iterate over all tiles
     for (int tileIdx = 0; tileIdx < (K + tileSize - 1) / tileSize; ++tileIdx) {
-        
+
         // Load the corresponding tiles from A and B to shared memory
         int tiledRow = row;
         int tiledColA = tileIdx * tileSize + threadIdx.x;
@@ -52,8 +51,8 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
 
     auto result = measurePerformance([&]() {
-        dim3 blockDim(tileSize, tileSize);
-        dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
+        dim3 blockDim(tileSize, tileSize); // Block size based on tile size
+        dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y); // Grid size
         matrixMulTiled<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K, tileSize);
     }, M, N, K);
 
