@@ -18,7 +18,7 @@ int main(int argc, char *argv[]) {
     printf("Max Threads per SM: %d", prop.maxThreadsPerMultiProcessor);
     printf("Warp Size: %d", prop.warpSize);
     printf("Max Warps per SM: %d", prop.maxThreadsPerMultiProcessor / prop.warpSize);
-    printf("Max Blocks per SM: %d", prop.multiProcessorCount);,prop.name, prop.major, prop.minor, prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0), prop.sharedMemPerBlock / 1024, prop.maxThreadsPerBlock, prop.maxThreadsPerMultiProcessor, prop.warpSize, prop.maxThreadsPerMultiProcessor / prop.warpSize, prop.multiProcessorCount);
+    printf("Max Blocks per SM: %d", prop.multiProcessorCount);
     if (argc != 5 || strcmp(argv[1], "-i") != 0) {
         fprintf(stderr, "Usage: %s -i <rowDimA> <colDimA> <colDimB>\n", argv[0]);
         return -1;
