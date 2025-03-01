@@ -82,7 +82,7 @@ double matrixMultiplyShared(float *A, float *B, float *C, int M, int N, int K, i
     cudaEventRecord(start);
     
     matrixMulShared<<<dimGrid, dimBlock, sharedMemSize>>>(d_A, d_B, d_C, M, N, K, BLOCK_SIZE);
-    checkCudaError(cudaGetLastError(), "Kernel launch failed");
+    checkCudaError(cudaGetLastError(), "Kernel launch failed matrix shared");
     
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);

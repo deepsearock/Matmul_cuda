@@ -41,7 +41,7 @@ double matrixMultiplyNaive(float *A, float *B, float *C, int M, int N, int K, in
     cudaEventRecord(start);
     
     matrixMulGlobalNaive<<<dimGrid, dimBlock>>>(d_A, d_B, d_C, M, N, K);
-    checkCudaError(cudaGetLastError(), "Kernel launch failed");
+    checkCudaError(cudaGetLastError(), "Kernel launch failed matrix naive");
     
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
