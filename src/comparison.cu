@@ -4,8 +4,8 @@
 #include "matrix_multiply_naive.cuh"
 
 int main(int argc, char *argv[]) {
-    if (argc != 5 || strcmp(argv[1], "-i") != 0) {
-        fprintf(stderr, "Usage: %s -i <rowDimA> <colDimA> <colDimB>\n", argv[0]);
+    if (argc != 4) {
+        fprintf(stderr, "Usage: %s <rowDimA> <colDimA> <colDimB>\n", argv[0]);
         return -1;
     }
     
