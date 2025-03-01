@@ -118,11 +118,7 @@ int main(int argc, char *argv[]) {
     
     cudaDeviceProp prop;
 cudaGetDeviceProperties(&prop, 0);
-printf("GPU: %s, Compute Capability: %d.%d, Global Memory: %.2f GB, Shared Memory per Block: %d KB, Max Threads per Block: %d
-
-", 
-       prop.name, prop.major, prop.minor, prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0), 
-       (int)(prop.sharedMemPerBlock / 1024), (int)prop.maxThreadsPerBlock);
+printf("GPU: %s, Compute Capability: %d.%d, Global Memory: %.2f GB, Shared Memory per Block: %d KB, Max Threads per Block: %d", prop.name, prop.major, prop.minor, prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0), (int)(prop.sharedMemPerBlock / 1024), (int)prop.maxThreadsPerBlock);
 
 int blockSizes[] = {8, 16, 32, 64, 128};
     int numBlocks = sizeof(blockSizes) / sizeof(blockSizes[0]);
@@ -165,8 +161,7 @@ int blockSizes[] = {8, 16, 32, 64, 128};
         totalError += avgError;
         double avgTflops = totalTflops / runs;
         double avgTime = totalTime / runs;
-                printf("Block Size: %d, Average Execution Time: %f ms, Average Performance: %f TFLOPS, Average Error Rate: %e
-", BLOCK_SIZE, avgTime, avgTflops, avgError);
+                printf("Block Size: %d, Average Execution Time: %f ms, Average Performance: %f TFLOPS, Average Error Rate: %e", BLOCK_SIZE, avgTime, avgTflops, avgError);
     }
     
     free(A);
