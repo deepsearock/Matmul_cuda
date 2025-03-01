@@ -1,105 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <cuda_runtime.h>
-#include <cuda_runtime_api.h>
-
-// Kernel for matrix multiplication using shared memory and tiling
-__global__ void matrixMulShared(float *A, float *B, float *C, int M, int N, int K, int BLOCK_SIZE) {
-    int blockRow = blockIdx.y;
-    int blockCol = blockIdx.x;
-    int threadRow = threadIdx.y;
-    int threadCol = threadIdx.x;
-    
-    extern __shared__ float sharedMem[];
-    float *As = sharedMem;
-    float *Bs = &sharedMem[BLOCK_SIZE * BLOCK_SIZE];
-    
-    float Cvalue = 0.0f;
-    
-    for (int m = 0; m < (K + BLOCK_SIZE - 1) / BLOCK_SIZE; ++m) {
-        int globalArow = blockRow * BLOCK_SIZE + threadRow;
-        int globalAcol = m * BLOCK_SIZE + threadCol;
-        int globalBrow = m * BLOCK_SIZE + threadRow;
-        int globalBcol = blockCol * BLOCK_SIZE + threadCol;
-        
-        if (globalArow < M && globalAcol < K)
-            As[threadRow * BLOCK_SIZE + threadCol] = A[globalArow * K + globalAcol];
-        else
-            As[threadRow * BLOCK_SIZE + threadCol] = 0.0f;
-        
-        if (globalBrow < K && globalBcol < N)
-            Bs[threadRow * BLOCK_SIZE + threadCol] = B[globalBrow * N + globalBcol];
-        else
-            Bs[threadRow * BLOCK_SIZE + threadCol] = 0.0f;
-        
-        __syncthreads();
-        
-        for (int k = 0; k < BLOCK_SIZE; ++k) {
-            Cvalue += As[threadRow * BLOCK_SIZE + k] * Bs[k * BLOCK_SIZE + threadCol];
-        }
-        
-        __syncthreads();
-    }
-    
-    int globalCrow = blockRow * BLOCK_SIZE + threadRow;
-    int globalCcol = blockCol * BLOCK_SIZE + threadCol;
-    
-    if (globalCrow < M && globalCcol < N) {
-        C[globalCrow * N + globalCcol] = Cvalue;
-    }
-}
-
-void checkCudaError(cudaError_t error, const char *message) {
-    if (error != cudaSuccess) {
-        fprintf(stderr, "CUDA error: %s: %s\n", message, cudaGetErrorString(error));
-        exit(-1);
-    }
-}
-
-// Matrix multiplication using standard global memory approach
-double matrixMultiplyGlobal(float *A, float *B, float *C, int M, int N, int K, int BLOCK_SIZE, float *executionTime) {
-    float *d_A, *d_B, *d_C;
-    size_t sizeA = M * K * sizeof(float);
-    size_t sizeB = K * N * sizeof(float);
-    size_t sizeC = M * N * sizeof(float);
-    
-    checkCudaError(cudaMalloc((void **)&d_A, sizeA), "cudaMalloc d_A failed");
-    checkCudaError(cudaMalloc((void **)&d_B, sizeB), "cudaMalloc d_B failed");
-    checkCudaError(cudaMalloc((void **)&d_C, sizeC), "cudaMalloc d_C failed");
-    
-    checkCudaError(cudaMemcpy(d_A, A, sizeA, cudaMemcpyHostToDevice), "cudaMemcpy A->d_A failed");
-    checkCudaError(cudaMemcpy(d_B, B, sizeB, cudaMemcpyHostToDevice), "cudaMemcpy B->d_B failed");
-    
-    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
-    dim3 dimGrid((N + BLOCK_SIZE - 1) / BLOCK_SIZE, (M + BLOCK_SIZE - 1) / BLOCK_SIZE);
-    
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start);
-    
-    matrixMulShared<<<dimGrid, dimBlock>>>(d_A, d_B, d_C, M, N, K, BLOCK_SIZE);
-    checkCudaError(cudaGetLastError(), "Kernel launch failed");
-    
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-    
-    cudaEventElapsedTime(executionTime, start, stop);
-    
-    double ops = 2.0 * M * N * K;
-    double tflops = (ops / (*executionTime / 1000.0)) / 1e12;
-    
-    checkCudaError(cudaMemcpy(C, d_C, sizeC, cudaMemcpyDeviceToHost), "cudaMemcpy d_C->C failed");
-    
-    cudaFree(d_A);
-    cudaFree(d_B);
-    cudaFree(d_C);
-    
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
-    
-    return tflops;
-}
+#include "matrix_multiply_shared.cuh"
+#include "matrix_multiply_naive.cuh"
 
 int main(int argc, char *argv[]) {
     if (argc != 5 || strcmp(argv[1], "-i") != 0) {
@@ -107,10 +9,9 @@ int main(int argc, char *argv[]) {
         return -1;
     }
     
-    int M = atoi(argv[2]);
-    int K = atoi(argv[3]);
-    int N = atoi(argv[4]);
-    
+    int M = atoi(argv[1]);
+    int K = atoi(argv[2]);
+    int N = atoi(argv[3]);
     int blockSizes[] = {8, 16, 32};
     int numBlocks = sizeof(blockSizes) / sizeof(blockSizes[0]);
     
@@ -121,13 +22,16 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < M * K; i++) A[i] = (float)(rand() % 100) / 100.0f;
     for (int i = 0; i < K * N; i++) B[i] = (float)(rand() % 100) / 100.0f;
     
-    printf("\nComparing Shared Memory vs Global Memory Performance:\n");
-    for (int b = 0; b < numBlocks; b++) {
-        int BLOCK_SIZE = blockSizes[b];
-        float execTimeShared = 0.0f, execTimeGlobal = 0.0f;
-        double tflopsShared = matrixMultiply(A, B, C, M, N, K, BLOCK_SIZE, &execTimeShared);
-        double tflopsGlobal = matrixMultiplyGlobal(A, B, C, M, N, K, BLOCK_SIZE, &execTimeGlobal);
-        printf("Block Size: %d | Shared Memory: %.2f TFLOPS, %.2f ms | Global Memory: %.2f TFLOPS, %.2f ms\n", BLOCK_SIZE, tflopsShared, execTimeShared, tflopsGlobal, execTimeGlobal);
+    printf("\nMatrix Multiplication Performance Comparison:\n");
+    printf("%-12s %-20s %-20s %-20s %-20s\n", "Block Size", "Shared TFLOPS", "Shared Time (ms)", "Naive TFLOPS", "Naive Time (ms)");
+    
+    for (int i = 0; i < numBlocks; i++) {
+        int BLOCK_SIZE = blockSizes[i];
+        float execTimeShared = 0.0f, execTimeNaive = 0.0f;
+        double tflopsShared = matrixMultiplyShared(A, B, C, M, N, K, BLOCK_SIZE, &execTimeShared);
+        double tflopsNaive = matrixMultiplyNaive(A, B, C, M, N, K, BLOCK_SIZE, &execTimeNaive);
+        
+        printf("%-12d %-20.2f %-20.2f %-20.2f %-20.2f\n", BLOCK_SIZE, tflopsShared, execTimeShared, tflopsNaive, execTimeNaive);
     }
     
     free(A);
