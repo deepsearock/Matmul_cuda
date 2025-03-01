@@ -58,6 +58,52 @@ void checkCudaError(cudaError_t error, const char *message) {
     }
 }
 
+double matrixMultiply(float *A, float *B, float *C, int M, int N, int K, int BLOCK_SIZE) {
+    float *d_A, *d_B, *d_C;
+    size_t sizeA = M * K * sizeof(float);
+    size_t sizeB = K * N * sizeof(float);
+    size_t sizeC = M * N * sizeof(float);
+    
+    checkCudaError(cudaMalloc((void **)&d_A, sizeA), "cudaMalloc d_A failed");
+    checkCudaError(cudaMalloc((void **)&d_B, sizeB), "cudaMalloc d_B failed");
+    checkCudaError(cudaMalloc((void **)&d_C, sizeC), "cudaMalloc d_C failed");
+    
+    checkCudaError(cudaMemcpy(d_A, A, sizeA, cudaMemcpyHostToDevice), "cudaMemcpy A->d_A failed");
+    checkCudaError(cudaMemcpy(d_B, B, sizeB, cudaMemcpyHostToDevice), "cudaMemcpy B->d_B failed");
+    
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    dim3 dimGrid((N + BLOCK_SIZE - 1) / BLOCK_SIZE, (M + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    int sharedMemSize = 2 * BLOCK_SIZE * BLOCK_SIZE * sizeof(float);
+    
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
+    
+    matrixMulShared<<<dimGrid, dimBlock, sharedMemSize>>>(d_A, d_B, d_C, M, N, K, BLOCK_SIZE);
+    checkCudaError(cudaGetLastError(), "Kernel launch failed");
+    
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    
+    double ops = 2.0 * M * N * K;
+    double tflops = (ops / (milliseconds / 1000.0)) / 1e12;
+    
+    checkCudaError(cudaMemcpy(C, d_C, sizeC, cudaMemcpyDeviceToHost), "cudaMemcpy d_C->C failed");
+    
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+    
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+    
+    return tflops;
+}
+
 int main(int argc, char *argv[]) {
     if (argc != 5 || strcmp(argv[1], "-i") != 0) {
         fprintf(stderr, "Usage: %s -i <rowDimA> <colDimA> <colDimB>\n", argv[0]);
@@ -89,30 +135,12 @@ int main(int argc, char *argv[]) {
         int runs = 100;
         
         for (int i = 0; i < runs; i++) {
-            cudaEvent_t start, stop;
-            cudaEventCreate(&start);
-            cudaEventCreate(&stop);
-            cudaEventRecord(start);
-            
             double tflops = matrixMultiply(A, B, C, M, N, K, BLOCK_SIZE);
-            
-            cudaEventRecord(stop);
-            cudaEventSynchronize(stop);
-            
-            float milliseconds = 0;
-            cudaEventElapsedTime(&milliseconds, start, stop);
-            
-            totalTime += milliseconds;
             totalTflops += tflops;
-            
-            cudaEventDestroy(start);
-            cudaEventDestroy(stop);
         }
         
-        double avgTime = totalTime / runs;
         double avgTflops = totalTflops / runs;
-        
-        printf("Block Size: %d, Average Execution Time: %f ms, Average Performance: %f TFLOPS\n", BLOCK_SIZE, avgTime, avgTflops);
+        printf("Block Size: %d, Average Performance: %f TFLOPS\n", BLOCK_SIZE, avgTflops);
     }
     
     free(A);
