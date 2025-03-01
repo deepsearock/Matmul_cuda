@@ -54,8 +54,7 @@ __global__ void matrixMulShared(float *A, float *B, float *C, int M, int N, int 
 
 void checkCudaError(cudaError_t error, const char *message) {
     if (error != cudaSuccess) {
-        fprintf(stderr, "CUDA error: %s: %s
-", message, cudaGetErrorString(error));
+        fprintf(stderr, "CUDA error: %s: %s", message, cudaGetErrorString(error));
         exit(-1);
     }
 }

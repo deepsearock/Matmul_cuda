@@ -18,13 +18,6 @@ __global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N,
     }
 }
 
-void checkCudaError(cudaError_t error, const char *message) {
-    if (error != cudaSuccess) {
-        fprintf(stderr, "CUDA error: %s: %s\n", message, cudaGetErrorString(error));
-        exit(-1);
-    }
-}
-
 // Host function to manage memory and execute naive global memory matrix multiplication
 double matrixMultiplyNaive(float *A, float *B, float *C, int M, int N, int K, int BLOCK_SIZE, float *executionTime) {
     float *d_A, *d_B, *d_C;
