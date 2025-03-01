@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
         
         // Shared Memory Kernel Execution
         cudaEventRecord(start);
-        matrixMultiplyShared<<<dim3(N/blockSize, M/blockSize), dim3(blockSize, blockSize)>>>(A, B, C, M, K, N);
+        matrixMultiplyShared(A, B, C, M, K, N, blockSize, &sharedTime);
         cudaEventRecord(stop);
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&milliseconds, start, stop);
@@ -61,7 +61,7 @@ int main(int argc, char *argv[]) {
         
         // Naive Kernel Execution
         cudaEventRecord(start);
-        matrixMultiplyNaive<<<dim3(N/blockSize, M/blockSize), dim3(blockSize, blockSize)>>>(A, B, C, M, K, N);
+        matrixMultiplyNaive(A, B, C, M, K, N, blockSize, &naiveTime);
         cudaEventRecord(stop);
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&milliseconds, start, stop);
