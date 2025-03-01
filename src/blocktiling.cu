@@ -76,8 +76,22 @@ double matrixMultiply(float *A, float *B, float *C, int M, int N, int K, int BLO
     dim3 dimGrid((N + BLOCK_SIZE - 1) / BLOCK_SIZE, (M + BLOCK_SIZE - 1) / BLOCK_SIZE);
     int sharedMemSize = 2 * BLOCK_SIZE * BLOCK_SIZE * sizeof(float);
     
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
+    
     matrixMulShared<<<dimGrid, dimBlock, sharedMemSize>>>(d_A, d_B, d_C, M, N, K, BLOCK_SIZE);
     checkCudaError(cudaGetLastError(), "Kernel launch failed");
+    
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    
+    double ops = 2.0 * M * N * K;
+    double tflops = (ops / (milliseconds / 1000.0)) / 1e12;
     
     checkCudaError(cudaMemcpy(C, d_C, sizeC, cudaMemcpyDeviceToHost), "cudaMemcpy d_C->C failed");
     
@@ -85,7 +99,10 @@ double matrixMultiply(float *A, float *B, float *C, int M, int N, int K, int BLO
     cudaFree(d_B);
     cudaFree(d_C);
     
-    return 0;
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+    
+    return tflops;
 }
 
 int main(int argc, char *argv[]) {
@@ -112,7 +129,8 @@ int main(int argc, char *argv[]) {
     }
     
     printf("Running matrix multiplication with dimensions A(%d x %d), B(%d x %d)\n", M, K, K, N);
-    matrixMultiply(A, B, C, M, N, K, BLOCK_SIZE);
+    double tflops = matrixMultiply(A, B, C, M, N, K, BLOCK_SIZE);
+    printf("Execution Time: %f ms, Performance: %f TFLOPS\n", tflops * 1e12 / (2.0 * M * N * K), tflops);
     
     free(A);
     free(B);
