@@ -43,6 +43,13 @@ int main(int argc, char *argv[]) {
         float theoreticalOccupancy = (float)achievedWarps / theoreticalWarps * 100.0f;
         float achievedOccupancy = (float)numBlocksPerSM / (prop.maxThreadsPerMultiProcessor / (blockSize * blockSize)) * 100.0f;
 
+        // Timing and TFLOPS Calculation
+        cudaEvent_t start, stop;
+        float milliseconds;
+        
+        cudaEventCreate(&start);
+        cudaEventCreate(&stop);
+
         // Shared Memory Kernel Execution
         float sharedTime = 0.0f;
         double sharedTflops = 0.0f;
