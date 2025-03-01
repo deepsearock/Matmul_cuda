@@ -58,7 +58,7 @@ void checkCudaError(cudaError_t error, const char *message) {
     }
 }
 
-double matrixMultiply(float *A, float *B, float *C, int M, int N, int K, int BLOCK_SIZE) {
+double matrixMultiply(float *A, float *B, float *C, int M, int N, int K, int BLOCK_SIZE, float *executionTime) {
     float *d_A, *d_B, *d_C;
     size_t sizeA = M * K * sizeof(float);
     size_t sizeB = K * N * sizeof(float);
@@ -86,11 +86,10 @@ double matrixMultiply(float *A, float *B, float *C, int M, int N, int K, int BLO
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     
-    float milliseconds = 0;
-    cudaEventElapsedTime(&milliseconds, start, stop);
+    cudaEventElapsedTime(executionTime, start, stop);
     
     double ops = 2.0 * M * N * K;
-    double tflops = (ops / (milliseconds / 1000.0)) / 1e12;
+    double tflops = (ops / (*executionTime / 1000.0)) / 1e12;
     
     checkCudaError(cudaMemcpy(C, d_C, sizeC, cudaMemcpyDeviceToHost), "cudaMemcpy d_C->C failed");
     
@@ -130,17 +129,20 @@ int main(int argc, char *argv[]) {
     
     for (int b = 0; b < numBlocks; b++) {
         int BLOCK_SIZE = blockSizes[b];
-        double totalTime = 0.0;
         double totalTflops = 0.0;
+        float totalTime = 0.0;
         int runs = 100;
         
         for (int i = 0; i < runs; i++) {
-            double tflops = matrixMultiply(A, B, C, M, N, K, BLOCK_SIZE);
+            float execTime = 0.0f;
+            double tflops = matrixMultiply(A, B, C, M, N, K, BLOCK_SIZE, &execTime);
             totalTflops += tflops;
+            totalTime += execTime;
         }
         
         double avgTflops = totalTflops / runs;
-        printf("Block Size: %d, Average Performance: %f TFLOPS\n", BLOCK_SIZE, avgTflops);
+        double avgTime = totalTime / runs;
+        printf("Block Size: %d, Average Execution Time: %f ms, Average Performance: %f TFLOPS\n", BLOCK_SIZE, avgTime, avgTflops);
     }
     
     free(A);
