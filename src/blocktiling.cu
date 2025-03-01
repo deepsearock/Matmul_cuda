@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <cuda_runtime.h>
-#include <cuda_runtime_api.h>
 
 // Kernel for matrix multiplication using shared memory and tiling
 __global__ void matrixMulShared(float *A, float *B, float *C, int M, int N, int K, int BLOCK_SIZE) {
@@ -105,7 +104,7 @@ double matrixMultiply(float *A, float *B, float *C, int M, int N, int K, int BLO
     return tflops;
 }
 
-
+#include <cuda_runtime_api.h>
 
 int main(int argc, char *argv[]) {
     if (argc != 5 || strcmp(argv[1], "-i") != 0) {
@@ -119,9 +118,13 @@ int main(int argc, char *argv[]) {
     
     cudaDeviceProp prop;
 cudaGetDeviceProperties(&prop, 0);
-printf("GPU: %s, Compute Capability: %d.%d, Global Memory: %.2f GB, Shared Memory per Block: %d KB, Max Threads per Block: %d \n\n", prop.name, prop.major, prop.minor, prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0), (int)(prop.sharedMemPerBlock / 1024), (int)prop.maxThreadsPerBlock);
+printf("GPU: %s, Compute Capability: %d.%d, Global Memory: %.2f GB, Shared Memory per Block: %d KB, Max Threads per Block: %d
 
-int blockSizes[] = {8, 16, 32};
+", 
+       prop.name, prop.major, prop.minor, prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0), 
+       (int)(prop.sharedMemPerBlock / 1024), (int)prop.maxThreadsPerBlock);
+
+int blockSizes[] = {8, 16, 32, 64, 128};
     int numBlocks = sizeof(blockSizes) / sizeof(blockSizes[0]);
     
     float *A = (float *)malloc(M * K * sizeof(float));
@@ -135,22 +138,35 @@ int blockSizes[] = {8, 16, 32};
         B[i] = (float)(rand() % 100) / 100.0f;
     }
     
+    double totalError = 0.0;
     for (int b = 0; b < numBlocks; b++) {
         int BLOCK_SIZE = blockSizes[b];
         double totalTflops = 0.0;
         float totalTime = 0.0;
         int runs = 100;
         
+                double errorSum = 0.0;
         for (int i = 0; i < runs; i++) {
             float execTime = 0.0f;
             double tflops = matrixMultiply(A, B, C, M, N, K, BLOCK_SIZE, &execTime);
-            totalTflops += tflops;
+                        totalTflops += tflops;
+            for (int j = 0; j < M * N; j++) {
+                double expected = 0.0;
+                for (int k = 0; k < K; k++) {
+                    expected += A[(j / N) * K + k] * B[k * N + (j % N)];
+                }
+                double diff = fabs(C[j] - expected);
+                errorSum += diff / (expected + 1e-6); // Avoid division by zero
+            }
             totalTime += execTime;
         }
         
+                double avgError = errorSum / (M * N * runs);
+        totalError += avgError;
         double avgTflops = totalTflops / runs;
         double avgTime = totalTime / runs;
-        printf("Block Size: %d, Average Execution Time: %f ms, Average Performance: %f TFLOPS\n", BLOCK_SIZE, avgTime, avgTflops);
+                printf("Block Size: %d, Average Execution Time: %f ms, Average Performance: %f TFLOPS, Average Error Rate: %e
+", BLOCK_SIZE, avgTime, avgTflops, avgError);
     }
     
     free(A);
