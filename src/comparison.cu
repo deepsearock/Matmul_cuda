@@ -58,7 +58,6 @@ int main(int argc, char *argv[]) {
         naiveTflops = matrixMultiplyNaive(A, B, C, M, K, N, blockSize, &naiveTime)
         
         printf("%-12d %-20.3f %-20.3f %-20.3f %-20.3f %-20d %-20d %-20.2f %-20.2f\n", blockSize, sharedTflops, sharedTime, naiveTflops, naiveTime, theoreticalWarps, achievedWarps, theoreticalOccupancy, achievedOccupancy);
-    }
     
     free(A);
     free(B);
