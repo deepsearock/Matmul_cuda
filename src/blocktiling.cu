@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
     int K = atoi(argv[3]); // Columns of A, rows of B
     int N = atoi(argv[4]); // Columns of B
     
-    int blockSizes[] = {8, 16, 32};
+    int blockSizes[] = {8, 16, 32, 64, 128};
     int numBlocks = sizeof(blockSizes) / sizeof(blockSizes[0]);
     
     float *A = (float *)malloc(M * K * sizeof(float));
