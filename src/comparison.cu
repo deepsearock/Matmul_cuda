@@ -45,12 +45,18 @@ int main(int argc, char *argv[]) {
 
         // Shared Memory Kernel Execution
         float sharedTime = 0.0f;
-        matrixMultiplyShared(A, B, C, M, K, N, blockSize, &sharedTime);
+        dim3 gridDim((N + blockSize - 1) / blockSize, (M + blockSize - 1) / blockSize);
+        dim3 blockDim(blockSize, blockSize);
+        matrixMultiplyShared<<<gridDim, blockDim>>>(A, B, C, M, K, N, blockSize, &sharedTime);
+        cudaDeviceSynchronize();
         float sharedTflops = (2.0f * M * K * N) / (sharedTime * 1.0e6);
         
         // Naive Kernel Execution
         float naiveTime = 0.0f;
-        matrixMultiplyNaive(A, B, C, M, K, N, blockSize, &naiveTime);
+        dim3 gridDim_naive((N + blockSize - 1) / blockSize, (M + blockSize - 1) / blockSize);
+        dim3 blockDim_naive(blockSize, blockSize);
+        matrixMultiplyNaive<<<gridDim_naive, blockDim_naive>>>(A, B, C, M, K, N, blockSize, &naiveTime);
+        cudaDeviceSynchronize();
         float naiveTflops = (2.0f * M * K * N) / (naiveTime * 1.0e6);
         
         printf("%-12d %-20.3f %-20.3f %-20.3f %-20.3f %-20d %-20d %-20.2f %-20.2f\n", blockSize, sharedTflops, sharedTime, naiveTflops, naiveTime, theoreticalWarps, achievedWarps, theoreticalOccupancy, achievedOccupancy);
