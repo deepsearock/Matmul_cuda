@@ -12,10 +12,10 @@
 __global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N, int K, int blockSize) {
 
     // Calculate the row index of the C element and A
-    int row = blockIdx.x * blockSize + (threadIdx.x % blockSize);
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
 
     // Calculate the column index of the C element and B
-    int col = blockIdx.y * blockSize + (threadIdx.x / blockSize);
+    int col = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (row < M && col < N) {
         float sum = 0;
