@@ -52,24 +52,34 @@ int main(int argc, char *argv[]) {
 
     for (int blockSize : blockSizes) {
         for (int tileSize : tileSizes) {
-            //auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, blockSize);
-            //double totalNaiveTime = naiveResult.second;
-            //double totalNaiveFlops = naiveResult.first;
-            //double naiveMemoryBandwidth = memoryVolumeGB / (totalNaiveTime / 1000.0);
+            double totalNaiveTime = 0.0, totalNaiveFlops = 0.0;
+            double totalTiledTime = 0.0, totalTiledFlops = 0.0;
 
-            auto tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
-            double totalTiledTime = tiledResult.second;
-            double totalTiledFlops = tiledResult.first;
-            double tiledMemoryBandwidth = memoryVolumeGB / (totalTiledTime / 1000.0);
+            for (int run = 0; run < 10; ++run) {
+                auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, blockSize);
+                double totalNaiveTime = naiveResult.second;
+                double totalNaiveFlops = naiveResult.first;
+                //double naiveMemoryBandwidth = memoryVolumeGB / (totalNaiveTime / 1000.0);
+
+                auto tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
+                double totalTiledTime = tiledResult.second;
+                double totalTiledFlops = tiledResult.first;
+                //double tiledMemoryBandwidth = memoryVolumeGB / (totalTiledTime / 1000.0);
+            }
+
+            double avgNaiveTime = totalNaiveTime / 10.0;
+            double avgNaiveFlops = totalNaiveFlops / 10.0;
+            double avgTiledTime = totalTiledTime / 10.0;
+            double avgTiledFlops = totalTiledFlops / 10.0;
 
             std::cout << "\nPerformance Results:" << std::endl;
             std::cout << "Block Size: " << blockSize << ", Tile Size: " << tileSize << std::endl;
-            //std::cout << "Naive Execution Time (ms): " << totalNaiveTime << std::endl;
-            std::cout << "Tiled Execution Time (ms): " << totalTiledTime << std::endl;
-            //std::cout << "Naive Performance (TFLOPS): " << totalNaiveFlops << std::endl;
-            std::cout << "Tiled Performance (TFLOPS): " << totalTiledFlops << std::endl;
+            std::cout << "Naive Execution Time (ms): " << avgNaiveTime << std::endl;
+            std::cout << "Tiled Execution Time (ms): " << avgTiledTime << std::endl;
+            std::cout << "Naive Performance (TFLOPS): " << avgNaiveFlops << std::endl;
+            std::cout << "Tiled Performance (TFLOPS): " << avgTiledFlops << std::endl;
             //std::cout << "Naive Memory Bandwidth (GB/s): " << naiveMemoryBandwidth << std::endl;
-            std::cout << "Tiled Memory Bandwidth (GB/s): " << tiledMemoryBandwidth << std::endl;
+            //std::cout << "Tiled Memory Bandwidth (GB/s): " << tiledMemoryBandwidth << std::endl;
         }
     }
     return 0;
