@@ -60,7 +60,7 @@ int main(int argc, char *argv[]) {
             double avgTiledFlops = totalTiledFlops / 10.0;
 
             std::cout << "\nPerformance Results:" << std::endl;
-            std::cout << "Block Size: " << blockSize << ", Tile Size: " << tileSize << std::endl;
+            std::cout << "Block Size: " << blockSize << ", Tile Size: 32x" << tileSize << std::endl;
             std::cout << "Naive Execution Time (ms): " << avgNaiveTime << std::endl;
             std::cout << "Tiled Execution Time (ms): " << avgTiledTime << std::endl;
             std::cout << "Naive Performance (TFLOPS): " << avgNaiveFlops << std::endl;
