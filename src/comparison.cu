@@ -24,6 +24,7 @@ void printGpuSpecs() {
     std::cout << "  Number of SMs: " << mygpu.multiProcessorCount << std::endl;
     std::cout << "  GPU Clock Rate (MHz): " << mygpu.clockRate / 1000.0 << std::endl;
     std::cout << "  GPU Memory Clock Rate (Mhz): " <<mygpu.memoryClockRate / 1000.0 << std::endl;
+    std::cout << "  Memory Bus Width: " << mygpu.memoryBusWidth << std::endl;
     std::cout << "  Memory Bandwidth (GB/s): " << mygpu.memoryBusWidth * mygpu.memoryClockRate * 2 / 1.0e6 << std::endl;
 }
 
