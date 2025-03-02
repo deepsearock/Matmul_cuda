@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <getopt.h>
+#include <cuda_runtime.h>
 #include "matrix_multiply_tiled.cuh"
 #include "matrix_multiply_naive.cuh"
 
@@ -11,6 +12,19 @@ void printUsage() {
     std::cout << "  <colDimA>: Number of columns in matrix A (and number of rows in matrix B)" << std::endl;
     std::cout << "  <colDimB>: Number of columns in matrix B and matrix C" << std::endl;
     exit(1);
+}
+
+// Function to retrieve and display GPU specifications
+void printGpuSpecs() {
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+
+    std::cout << "GPU Specifications:" << std::endl;
+    std::cout << "  Name: " << prop.name << std::endl;
+    std::cout << "  CUDA Cores per SM: " << prop.multiProcessorCount << std::endl;
+    std::cout << "  Number of SMs: " << prop.multiProcessorCount << std::endl;
+    std::cout << "  GPU Clock Rate (MHz): " << prop.clockRate / 1000.0 << std::endl;
+    std::cout << "  Memory Bandwidth (GB/s): " << prop.memoryBusWidth * prop.memoryClockRate * 2 / 1.0e6 << std::endl;
 }
 
 int main(int argc, char *argv[]) {
@@ -23,6 +37,9 @@ int main(int argc, char *argv[]) {
     int colDimA = std::atoi(argv[3]);
     int colDimB = std::atoi(argv[4]);
 
+    // Print GPU specifications before running tests
+    printGpuSpecs();
+
     // Print matrix dimensions
     std::cout << "Matrix dimensions: " << std::endl;
     std::cout << "  A (" << rowDimA << "x" << colDimA << ")" << std::endl;
@@ -33,6 +50,9 @@ int main(int argc, char *argv[]) {
     int blockSizes[] = {8, 16, 32};
     int tileSizes[] = {8, 16, 32};
 
+    // Compute theoretical TFLOPS: (2 * M * N * K) / (1e12) / execution_time
+    double numOps = 2.0 * rowDimA * colDimB * colDimA;
+
     // Compare performance for different block and tile sizes
     for (int blockSize : blockSizes) {
         for (int tileSize : tileSizes) {
@@ -41,31 +61,26 @@ int main(int argc, char *argv[]) {
             double totalTiledTime = 0.0;
             double totalTiledFlops = 0.0;
 
-            // Run the test 10 times
-            for (int i = 0; i < 1; ++i) {
-                std::cout << "\nRunning Naive Matrix Multiplication with Block Size: " << blockSize << " and Tile Size: " << tileSize << " (Run " << i + 1 << ")" << std::endl;
-                auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, blockSize);
-                totalNaiveTime += naiveResult.second;
-                totalNaiveFlops += naiveResult.first;
+            // Run once per configuration
+            auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, blockSize);
+            totalNaiveTime = naiveResult.second;
+            totalNaiveFlops = naiveResult.first;
 
-                std::cout << "\nRunning Tiled Matrix Multiplication with Block Size: " << blockSize << " and Tile Size: " << tileSize << " (Run " << i + 1 << ")" << std::endl;
-                auto tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
-                totalTiledTime += tiledResult.second;
-                totalTiledFlops += tiledResult.first;
-            }
+            auto tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
+            totalTiledTime = tiledResult.second;
+            totalTiledFlops = tiledResult.first;
 
-            // Calculate averages
-            double avgNaiveTime = totalNaiveTime / 10.0;
-            double avgNaiveFlops = totalNaiveFlops / 10.0;
-            double avgTiledTime = totalTiledTime / 10.0;
-            double avgTiledFlops = totalTiledFlops / 10.0;
+            // Compute theoretical TFLOPS
+            double theoreticalNaiveTflops = numOps / (totalNaiveTime * 1e6);
+            double theoreticalTiledTflops = numOps / (totalTiledTime * 1e6);
 
-            // Output average results
-            std::cout << "\nAverage Performance over 10 Runs:" << std::endl;
-            std::cout << "Naive Execution Time (ms): " << avgNaiveTime << std::endl;
-            std::cout << "Tiled Execution Time (ms): " << avgTiledTime << std::endl;
-            std::cout << "Naive Performance (TFLOPS): " << avgNaiveFlops << std::endl;
-            std::cout << "Tiled Performance (TFLOPS): " << avgTiledFlops << std::endl;
+            // Output results
+            std::cout << "\nPerformance Results:" << std::endl;
+            std::cout << "Block Size: " << blockSize << ", Tile Size: " << tileSize << std::endl;
+            std::cout << "Naive Execution Time (ms): " << totalNaiveTime << std::endl;
+            std::cout << "Tiled Execution Time (ms): " << totalTiledTime << std::endl;
+            std::cout << "Naive Performance (TFLOPS): " << totalNaiveFlops << " (Measured), " << theoreticalNaiveTflops << " (Theoretical)" << std::endl;
+            std::cout << "Tiled Performance (TFLOPS): " << totalTiledFlops << " (Measured), " << theoreticalTiledTflops << " (Theoretical)" << std::endl;
         }
     }
 

@@ -11,10 +11,10 @@
 // Naive CUDA kernel for matrix multiplication using only global memory
 __global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N, int K) {
 
-    // Calculate the row index of the M element and N
+    // Calculate the row index of the C element and A
     int row = blockIdx.y * blockDim.y + threadIdx.y;
 
-    // Calculate the column index of the N and K element
+    // Calculate the column index of the C element and B
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (row < M && col < N) {
