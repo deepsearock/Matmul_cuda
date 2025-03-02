@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
     std::cout << "  C (" << rowDimA << "x" << colDimB << ")" << std::endl;
 
     int blockSizes[] = {8, 16, 32};
-    int tileSizes[] = {32, 64, 128};
+    int tileSizes[] = {8, 16, 32};
 
     double numOps = 2.0 * rowDimA * colDimB * colDimA;
     double memoryVolumeBytes = (rowDimA * colDimA + colDimA * colDimB + rowDimA * colDimB) * sizeof(float);

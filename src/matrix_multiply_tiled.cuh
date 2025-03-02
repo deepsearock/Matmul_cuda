@@ -11,8 +11,8 @@
 // Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE]; // Shared memory for A
-    __shared__ float tileB[TILE_SIZE][TILE_SIZE]; // Shared memory for B
+    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1]; // Shared memory for A
+    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1]; // Shared memory for B
 
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;  // Row index of the C matrix
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;  // Column index of the C matrix
@@ -34,6 +34,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         __syncthreads();  // Ensure that all threads have loaded their respective tiles
 
         // Compute the sum for this block of C
+        #pragma unroll
         for (int k = 0; k < TILE_SIZE; ++k) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
@@ -54,14 +55,14 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     // Launch kernel based on template with fixed TILE_SIZE
     auto result = measurePerformance([&]() {
         switch (tileSize) {
+            case 8:
+                matrixMulTiled<8><<<dim3((N + 7) / 8, (M + 7) / 8), dim3(8, 8)>>>(d_A, d_B, d_C, M, N, K);
+                break;
+            case 16:
+                matrixMulTiled<16><<<dim3((N + 15) / 16, (M + 15) / 16), dim3(16, 16)>>>(d_A, d_B, d_C, M, N, K);
+                break;
             case 32:
-                matrixMulTiled<8><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 32)>>>(d_A, d_B, d_C, M, N, K);
-                break;
-            case 64:
-                matrixMulTiled<16><<<dim3((N + 63) / 64, (M + 63) / 64), dim3(64, 64)>>>(d_A, d_B, d_C, M, N, K);
-                break;
-            case 128:
-                matrixMulTiled<32><<<dim3((N + 127) / 128, (M + 127) / 128), dim3(128, 128)>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 32)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size!" << std::endl;
