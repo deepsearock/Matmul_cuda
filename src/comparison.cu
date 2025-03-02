@@ -34,8 +34,8 @@ int main(int argc, char *argv[]) {
     // int blockSizes[] = {8, 16, 32};
     int tileSizes[] = {8, 16, 32};
 
-    double memoryVolumeBytes = (rowDimA * colDimA + colDimA * colDimB + rowDimA * colDimB) * sizeof(float);
-    double memoryVolumeGB = memoryVolumeBytes / 1e9;
+    // double memoryVolumeBytes = (rowDimA * colDimA + colDimA * colDimB + rowDimA * colDimB) * sizeof(float);
+    // double memoryVolumeGB = memoryVolumeBytes / 1e9;
 
     
     for (int tileSize : tileSizes) {
