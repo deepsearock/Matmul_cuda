@@ -1,6 +1,6 @@
 #include <iostream>
 #include <cstdlib>
-#include "matrix_multiply_cpu.cuh"
+#include "./src/matrix_multiply_cpu.cuh"
 
 int main(int argc, char* argv[]) {
     if (argc != 4) {

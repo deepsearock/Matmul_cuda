@@ -3,8 +3,8 @@
 #include <cstdlib>
 #include <getopt.h>
 #include <cuda_runtime.h>
-#include "matrix_multiply_tiled.cuh"
-#include "matrix_multiply_naive.cuh"
+#include "./src/matrix_multiply_tiled.cuh"
+#include "./src/matrix_multiply_naive.cuh"
 #include "utils.cuh"
 
 void printUsage() {
