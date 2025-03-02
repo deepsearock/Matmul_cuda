@@ -43,3 +43,5 @@ inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K, int bloc
     return result;
 }
 
+#endif // MATRIX_MULTIPLY_NAIVE_CUH
+
