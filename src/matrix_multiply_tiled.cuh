@@ -17,8 +17,8 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     __shared__ float tileB[16][16 + 1];
 
     // calculate the row and column indexes
-    int row = blockIdx.y * TILE_SIZE + threadIdx.y;
-    int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+    int row = blockIdx.y * 16 + threadIdx.y;
+    int col = blockIdx.x * 16 + threadIdx.x;
 
     // sum register
     float sum = 0;
