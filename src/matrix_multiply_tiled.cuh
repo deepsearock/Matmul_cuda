@@ -14,8 +14,8 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     __shared__ float tileA[TILE_SIZE][TILE_SIZE]; // Shared memory for A
     __shared__ float tileB[TILE_SIZE][TILE_SIZE]; // Shared memory for B
 
-    int row = blockIdx.y * TILE_SIZE + threadIdx.y;  // Row index of the C matrix
-    int col = blockIdx.x * TILE_SIZE + threadIdx.x;  // Column index of the C matrix
+    int row = blockIdx.x * TILE_SIZE + threadIdx.x;  // Row index of the C matrix
+    int col = blockIdx.y * TILE_SIZE + threadIdx.y;  // Column index of the C matrix
     float sum = 0.0f;
 
     // Iterate over all tiles
@@ -28,14 +28,14 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
 
         // Handle boundary conditions: if the thread is out of bounds, load 0
-        tileA[threadIdx.y][threadIdx.x] = (tiledRow < M && tiledColA < K) ? A[tiledRow * K + tiledColA] : 0.0f;
-        tileB[threadIdx.y][threadIdx.x] = (tiledRowB < K && tiledColB < N) ? B[tiledRowB * N + tiledColB] : 0.0f;
+        tileA[threadIdx.x][threadIdx.y] = (tiledRow < M && tiledColA < K) ? A[tiledRow * K + tiledColA] : 0.0f;
+        tileB[threadIdx.x][threadIdx.y] = (tiledRowB < K && tiledColB < N) ? B[tiledRowB * N + tiledColB] : 0.0f;
 
         __syncthreads();  // Ensure that all threads have loaded their respective tiles
 
         // Compute the sum for this block of C
         for (int k = 0; k < TILE_SIZE; ++k) {
-            sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
+            sum += tileA[threadIdx.x][k] * tileB[k][threadIdx.y];
         }
         __syncthreads();  // Synchronize threads before loading the next tile
     }
