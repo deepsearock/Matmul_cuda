@@ -16,15 +16,15 @@ void matrixMultiplyCUBLAS(float* A, float* B, float* C, int M, int N, int K) {
     cudaMalloc((void**)&d_B, N * K * sizeof(float));
     cudaMalloc((void**)&d_C, M * K * sizeof(float));
 
-    cudaMemcpy(d_A, A, M * N * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, B, N * K * sizeof(float), cudaMemcpyHostToDevice);
+    //cudaMemcpy(d_A, A, M * N * sizeof(float), cudaMemcpyHostToDevice);
+    //cudaMemcpy(d_B, B, N * K * sizeof(float), cudaMemcpyHostToDevice);
 
     cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, 
                 K, M, N, 
                 &alpha, d_B, K, d_A, N, 
                 &beta, d_C, K);
 
-    cudaMemcpy(C, d_C, M * K * sizeof(float), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(C, d_C, M * K * sizeof(float), cudaMemcpyDeviceToHost);
 
     cudaFree(d_A);
     cudaFree(d_B);
