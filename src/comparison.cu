@@ -44,13 +44,13 @@ int main(int argc, char *argv[]) {
 
             for (int run = 0; run < 10; ++run) {
                 auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, blockSize);
-                totalNaiveTime = naiveResult.second;
-                totalNaiveFlops = naiveResult.first;
+                totalNaiveTime += naiveResult.second;
+                totalNaiveFlops += naiveResult.first;
                 //double naiveMemoryBandwidth = memoryVolumeGB / (totalNaiveTime / 1000.0);
 
                 auto tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
-                totalTiledTime = tiledResult.second;
-                totalTiledFlops = tiledResult.first;
+                totalTiledTime += tiledResult.second;
+                totalTiledFlops += tiledResult.first;
                 //double tiledMemoryBandwidth = memoryVolumeGB / (totalTiledTime / 1000.0);
             }
 
