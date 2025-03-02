@@ -44,39 +44,3 @@ inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K, int bloc
 }
 
 #endif // MATRIX_MULTIPLY_NAIVE_CUH
-
-#ifndef MATRIX_MULTIPLY_NAIVE_CUH
-#define MATRIX_MULTIPLY_NAIVE_CUH
-
-#include <cuda_runtime.h>
-#include <cuda_runtime_api.h>
-#include <iostream>
-#include <chrono>
-#include <cmath>
-#include "utils.cuh"
-
-// Naive CUDA kernel for matrix multiplication using only global memory
-__global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N, int K) {
-    
-    // Calculate the row index of the A element and B
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-
-    // Calculate the column index of the C and B element
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (row < M && col < N) {
-        float sum = 0.0f;
-
-        // Remove coalescing by using a strided access pattern
-        for (int k = 0; k < K; k += 2) {  // Access with stride 2 (non-coalesced access)
-            sum += A[row * K + k] * B[k * N + col];
-            if (k + 1 < K) {
-                sum += A[row * K + k + 1] * B[(k + 1) * N + col];
-            }
-        }
-
-        C[row * N + col] = sum;
-    }
-}
-
-#endif // MATRIX_MULTIPLY_NAIVE_CUH
