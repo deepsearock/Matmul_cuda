@@ -1,31 +1,43 @@
 #ifndef MATRIX_MULTIPLY_CPU_CUH
 #define MATRIX_MULTIPLY_CPU_CUH
 
-#include <cuda_runtime.h>
-#include <cuda_runtime_api.h>
 #include <iostream>
+#include <vector>
 #include <chrono>
-#include <cmath>
-#include "utils.cuh"
+#include <cstdlib>
+#include <random>
 
-// Naive CUDA kernel for matrix multiplication using only global memory
-void matrixMulCPU(float *A, float *B, float *C, int M, int N, int K) {
-
+// CPU implementation of matrix multiplication
+inline void matrixMulCPU(const float* A, const float* B, float* C, int M, int N, int K) {
     for (int i = 0; i < M; ++i) {
         for (int j = 0; j < K; ++j) {
-            C[i][j] = 0;
+            C[i * K + j] = 0;
             for (int k = 0; k < N; ++k) {
-                C[i][j] += A[i][k] * B[k][j];
+                C[i * K + j] += A[i * N + k] * B[k * K + j];
             }
         }
     }
 }
 
-// Function to allocate memory, launch the naive kernel, and measure performance
-inline std::pair<double, double> runMatrixMulCPU(int M, int N, int K) {
-    std::vector<std::vector<float>> A(M, std::vector<float>(N));
-    std::vector<std::vector<float>> B(N, std::vector<float>(K));
-    std::vector<std::vector<float>> C(M, std::vector<float>(K, 0));
+// Function to generate a random matrix
+
+inline void generateMatrix(float* matrix, int rows, int cols) {
+    std::random_device rd;  
+    std::mt19937 gen(rd()); 
+    std::uniform_real_distribution<float> dis(0.0, 1.0);
+
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            matrix[i * cols + j] = dis(gen); // Generates a float in range [0,1]
+        }
+    }
+}
+
+// Function to run matrix multiplication and return execution time and TFLOPS
+inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K) {
+    float* A = new float[M * N];
+    float* B = new float[N * K];
+    float* C = new float[M * K];
 
     generateMatrix(A, M, N);
     generateMatrix(B, N, K);
@@ -39,9 +51,11 @@ inline std::pair<double, double> runMatrixMulCPU(int M, int N, int K) {
     double num_operations = 2.0 * M * N * K; // Total FLOPs in matrix multiplication
     double tflops = (num_operations / (time_sec * 1e12)); // Convert to TFLOPS
 
+    delete[] A;
+    delete[] B;
+    delete[] C;
+
     return {time_sec, tflops};
 }
 
-
 #endif // MATRIX_MULTIPLY_CPU_CUH
-
