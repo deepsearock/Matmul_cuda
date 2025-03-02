@@ -85,9 +85,9 @@ inline std::pair<double, double> measurePerformance(std::function<void()> kernel
 
     // Compute TFLOPS
     double numOps = 2.0 * M * N * K;
-    double tflops = (numOps / (timeMs * 1e6));  // Convert to TFLOPS (1e6 for milliseconds)
+    double gflops = (numOps / (timeMs * 1e9));  // Convert to TFLOPS (1e6 for milliseconds)
 
-    return {tflops, timeMs};
+    return {gflops, timeMs};
 }
 
 #endif
