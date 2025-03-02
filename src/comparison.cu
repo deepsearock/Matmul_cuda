@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
             double totalTiledFlops = 0.0;
 
             // Run the test 10 times
-            for (int i = 0; i < 10; ++i) {
+            for (int i = 0; i < 1; ++i) {
                 std::cout << "\nRunning Naive Matrix Multiplication with Block Size: " << blockSize << " and Tile Size: " << tileSize << " (Run " << i + 1 << ")" << std::endl;
                 auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, blockSize);
                 totalNaiveTime += naiveResult.second;
