@@ -11,37 +11,49 @@
 // Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1]; // Shared memory for A
-    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1]; // Shared memory for B
+    // Shared memory for sub-matrices of A and B
+    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  // Padding added to avoid bank conflicts
+    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
 
-    int row = blockIdx.y * TILE_SIZE + threadIdx.y;  // Row index of the C matrix
-    int col = blockIdx.x * TILE_SIZE + threadIdx.x;  // Column index of the C matrix
+    // Compute row and column indexes
+    int row = blockIdx.y * TILE_SIZE + threadIdx.y;
+    int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+
+    // Initialize sum register
     float sum = 0.0f;
 
-    // Iterate over all tiles
+    // Iterate over all tiles required to compute C(row, col)
     for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
-
-        // Load the corresponding tiles from A and B to shared memory
+        // Load A tile into shared memory
         int tiledRow = row;
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
-        int tiledColB = col;
+        if (tiledRow < M && tiledColA < K)
+            tileA[threadIdx.y][threadIdx.x] = A[tiledRow * K + tiledColA];
+        else
+            tileA[threadIdx.y][threadIdx.x] = 0.0f; // Handle boundary condition
+
+        // Load B tile into shared memory
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
+        int tiledColB = col;
+        if (tiledRowB < K && tiledColB < N)
+            tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + tiledColB];
+        else
+            tileB[threadIdx.y][threadIdx.x] = 0.0f;
 
-        // Handle boundary conditions: if the thread is out of bounds, load 0
-        tileA[threadIdx.y][threadIdx.x] = (tiledRow < M && tiledColA < K) ? A[tiledRow * K + tiledColA] : 0.0f;
-        tileB[threadIdx.y][threadIdx.x] = (tiledRowB < K && tiledColB < N) ? B[tiledRowB * N + tiledColB] : 0.0f;
+        // Synchronize threads before computing
+        __syncthreads();
 
-        __syncthreads();  // Ensure that all threads have loaded their respective tiles
-
-        // Compute the sum for this block of C
+        // Perform matrix multiplication on loaded tiles
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; ++k) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
-        __syncthreads();  // Synchronize threads before loading the next tile
+        
+        // Synchronize before loading new tiles
+        __syncthreads();
     }
 
-    // Store the result in C, only if the thread is within bounds
+    // Store the computed value in global memory
     if (row < M && col < N) {
         C[row * N + col] = sum;
     }
