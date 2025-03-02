@@ -9,13 +9,13 @@
 #include "utils.cuh"
 
 // Naive CUDA kernel for matrix multiplication using only global memory
-__global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N, int K) {
+__global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N, int K, int blockSize) {
 
     // Calculate the row index of the C element and A
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int row = blockIdx.y * blockSize + (threadIdx.y / blockSize);
 
     // Calculate the column index of the C element and B
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    int col = blockIdx.x * blockSize + (threadIdx.x % blockSize);
 
     if (row < M && col < N) {
         float sum = 0;
@@ -36,7 +36,7 @@ inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K, int bloc
 
     auto result = measurePerformance([&]() {
         dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y, 1);
-        matrixMulGlobalNaive<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+        matrixMulGlobalNaive<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K, blockSize);
     }, M, N, K);
     
     freeDeviceMemory(d_A, d_B, d_C);
