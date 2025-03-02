@@ -13,8 +13,8 @@ template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
 
     // assign shared memory for tile a and tile b
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
-    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
+    __shared__ float tileA[32][32 + 1];  
+    __shared__ float tileB[32][32 + 1];
 
     // calculate the row and column indexes
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
@@ -68,13 +68,13 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     // launch kernel
     auto result = measurePerformance([&]() {
         switch (tileSize) {
-            case 32:
-                matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 32)>>>(d_A, d_B, d_C, M, N, K);
+            case 8:
+                matrixMulTiled<8><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 32)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 16)>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<16><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 16)>>>(d_A, d_B, d_C, M, N, K);
                 break;
-            case 8:
+            case 32:
                 matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
