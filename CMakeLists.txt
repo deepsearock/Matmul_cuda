@@ -7,7 +7,11 @@ set(CMAKE_CUDA_ARCHITECTURES 75)
 # Find and link CUDA libraries if necessary
 find_package(CUDAToolkit REQUIRED)
 
-# Create an executable for comparison.cu
+#find src
+include_directories(${CUDA_INCLUDE_DIRS})
+include_directories(${PROJECT_SOURCE_DIR}/src)
+
+#comparsion.cu
 add_executable(comparison comparison.cu)
 set_target_properties(comparison PROPERTIES 
     CUDA_STANDARD 14
@@ -15,7 +19,7 @@ set_target_properties(comparison PROPERTIES
 )
 target_link_libraries(comparison PRIVATE CUDA::cudart)
 
-# Create an executable for cpu.cu
+#cpu.cu
 add_executable(cpu cpu.cu)
 set_target_properties(cpu PROPERTIES 
     CUDA_STANDARD 14
@@ -23,7 +27,7 @@ set_target_properties(cpu PROPERTIES
 )
 target_link_libraries(cpu PRIVATE CUDA::cudart)
 
-# Create an executable for cublas.cu (requires cuBLAS library)
+#cublas
 add_executable(cublas cublas.cu)
 set_target_properties(cublas PROPERTIES 
     CUDA_STANDARD 14
