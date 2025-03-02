@@ -87,4 +87,4 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     return result;
 }
 
-#endif // MATRIX_MULTIPLY_TILED_CUH
+#endif

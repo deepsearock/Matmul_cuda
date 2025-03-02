@@ -58,4 +58,4 @@ inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K) {
     return {time_sec, tflops};
 }
 
-#endif // MATRIX_MULTIPLY_CPU_CUH
+#endif

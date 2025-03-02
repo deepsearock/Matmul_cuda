@@ -7,6 +7,9 @@ int main(int argc, char* argv[]) {
         std::cerr << "Usage: " << argv[0] << " <rowDimA> <colDimA> <colDimB>" << std::endl;
         return 1;
     }
+    
+    double time_sec;
+    double tflops;
 
     int M = std::atoi(argv[1]);
     int N = std::atoi(argv[2]);

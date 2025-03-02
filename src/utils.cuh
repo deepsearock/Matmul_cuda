@@ -9,16 +9,18 @@
 
 #define checkCudaErrors(val) checkCuda((val), #val, __FILE__, __LINE__)
 
+// unused could do random 0.0 to 1.0
 void populateMatrix(float *matrix, int rows, int cols) {
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    std::uniform_real_distribution<float> dist(0.0, 1.0);
     
     for (int i = 0; i < rows * cols; ++i) {
         matrix[i] = dist(gen);
     }
 }
 
+// error checking for cuda i see this a lot
 inline void checkCuda(cudaError_t result, const char *const func, const char *const file, int const line) {
     if (result != cudaSuccess) {
         std::cerr << "CUDA error at " << file << ":" << line << " in " << func << " (" << cudaGetErrorString(result) << ")\n";
@@ -26,6 +28,7 @@ inline void checkCuda(cudaError_t result, const char *const func, const char *co
     }
 }
 
+// print to terminal gpu specs
 void printGpuSpecs() {
     cudaDeviceProp mygpu;
     cudaGetDeviceProperties(&mygpu, 0);
@@ -40,42 +43,42 @@ void printGpuSpecs() {
     std::cout << "  Memory Bandwidth (GB/s): " << mygpu.memoryBusWidth * mygpu.memoryClockRate * 2 / 1.0e6 << std::endl;
 }
 
-// Function to allocate memory for matrices
+// memory allocation function on gpu
 inline void allocateDeviceMemory(float **d_A, float **d_B, float **d_C, int M, int N, int K) {
     checkCudaErrors(cudaMalloc((void**)d_A, M * K * sizeof(float)));
     checkCudaErrors(cudaMalloc((void**)d_B, K * N * sizeof(float)));
     checkCudaErrors(cudaMalloc((void**)d_C, M * N * sizeof(float)));
 }
 
-// Function to free allocated memory
+// function to free memory on gpu
 inline void freeDeviceMemory(float *d_A, float *d_B, float *d_C) {
     checkCudaErrors(cudaFree(d_A));
     checkCudaErrors(cudaFree(d_B));
     checkCudaErrors(cudaFree(d_C));
 }
 
-// Function to measure execution time and calculate TFLOPS
+// performance function mainly calcs tflops
 inline std::pair<double, double> measurePerformance(std::function<void()> kernelLaunch, int M, int N, int K) {
 
-    // Record start time
+    // start time
     auto start = std::chrono::high_resolution_clock::now();
     
-    // Launch the kernel
+    // launch any kernel loaded into this function
     kernelLaunch();
     
-    // Synchronize device and record end time
+    // check time using cudadevicesynchronize and then stops time
     checkCudaErrors(cudaDeviceSynchronize());
     auto end = std::chrono::high_resolution_clock::now();
 
-    // Calculate the duration in milliseconds
+    // time calculation
     std::chrono::duration<double, std::milli> duration = end - start;
     double timeMs = duration.count();
 
-    // Calculate floating-point operations and performance in TFLOPS
-    double numOps = 2.0 * M * N * K; // Floating point operations (for matrix multiplication)
+    // calculate tflops for matrix
+    double numOps = 2.0 * M * N * K;
     double tflops = (numOps / (timeMs * 1e9));
 
-    return {tflops, timeMs};  // Return the performance and execution time
+    return {tflops, timeMs};
 }
 
-#endif // UTILS_CUH
+#endif
