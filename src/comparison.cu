@@ -51,10 +51,10 @@ int main(int argc, char *argv[]) {
 
     for (int blockSize : blockSizes) {
         for (int tileSize : tileSizes) {
-            auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, blockSize);
-            double totalNaiveTime = naiveResult.second;
-            double totalNaiveFlops = naiveResult.first;
-            double naiveMemoryBandwidth = memoryVolumeGB / (totalNaiveTime / 1000.0);
+            //auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, blockSize);
+            //double totalNaiveTime = naiveResult.second;
+            //double totalNaiveFlops = naiveResult.first;
+            //double naiveMemoryBandwidth = memoryVolumeGB / (totalNaiveTime / 1000.0);
 
             auto tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
             double totalTiledTime = tiledResult.second;
@@ -63,11 +63,11 @@ int main(int argc, char *argv[]) {
 
             std::cout << "\nPerformance Results:" << std::endl;
             std::cout << "Block Size: " << blockSize << ", Tile Size: " << tileSize << std::endl;
-            std::cout << "Naive Execution Time (ms): " << totalNaiveTime << std::endl;
+            //std::cout << "Naive Execution Time (ms): " << totalNaiveTime << std::endl;
             std::cout << "Tiled Execution Time (ms): " << totalTiledTime << std::endl;
-            std::cout << "Naive Performance (TFLOPS): " << totalNaiveFlops << std::endl;
+            //std::cout << "Naive Performance (TFLOPS): " << totalNaiveFlops << std::endl;
             std::cout << "Tiled Performance (TFLOPS): " << totalTiledFlops << std::endl;
-            std::cout << "Naive Memory Bandwidth (GB/s): " << naiveMemoryBandwidth << std::endl;
+            //std::cout << "Naive Memory Bandwidth (GB/s): " << naiveMemoryBandwidth << std::endl;
             std::cout << "Tiled Memory Bandwidth (GB/s): " << tiledMemoryBandwidth << std::endl;
         }
     }
