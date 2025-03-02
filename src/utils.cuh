@@ -9,6 +9,13 @@
 
 #define checkCudaErrors(val) checkCuda((val), #val, __FILE__, __LINE__)
 
+void generateMatrix(float *matrix, int rows, int cols) {
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            matrix[i][j] = static_cast<float>(rand()) / RAND_MAX;
+        }
+    }
+}
 
 void populateMatrix(float *matrix, int rows, int cols) {
     std::random_device rd;
