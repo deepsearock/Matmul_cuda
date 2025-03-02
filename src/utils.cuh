@@ -66,13 +66,9 @@ inline std::pair<double, double> measurePerformance(std::function<void()> kernel
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
-    // Start recording execution time
+    cudaDeviceSynchronize();
     cudaEventRecord(start, 0);
-
-    // Launch the provided kernel function
     kernelLaunch();
-
-    // Ensure all GPU operations are complete
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
 
