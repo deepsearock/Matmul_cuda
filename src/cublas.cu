@@ -36,8 +36,8 @@ void matrixMultiplyCUBLAS(float* A, float* B, float* C, int M, int N, int K) {
 // quick cublas implementation to check for performance
 int main(int argc, char* argv[]) {
 
-    if (argc != 5) {
-        std::cerr << "Usage: " << argv[0] << " <rowDimA> <colDimA> <colDimB>" || std::string(argv[1]) != "-i" << std::endl;
+    if (argc != 5 || std::string(argv[1]) != "-i") {
+        std::cerr << "Usage: " << argv[0] << " -i <rowDimA> <colDimA> <colDimB>" << std::endl;
         return 1;
     }
 
