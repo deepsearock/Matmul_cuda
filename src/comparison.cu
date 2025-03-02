@@ -54,10 +54,10 @@ int main(int argc, char *argv[]) {
             //double tiledMemoryBandwidth = memoryVolumeGB / (totalTiledTime / 1000.0);
         }
 
-        double avgNaiveTime = totalNaiveTime / 10.0;
-        double avgNaiveFlops = totalNaiveFlops / 10.0;
-        double avgTiledTime = totalTiledTime / 10.0;
-        double avgTiledFlops = totalTiledFlops / 10.0;
+        double avgNaiveTime = totalNaiveTime / 1000.0;
+        double avgNaiveFlops = totalNaiveFlops / 1000.0;
+        double avgTiledTime = totalTiledTime / 1000.0;
+        double avgTiledFlops = totalTiledFlops / 1000.0;
 
         std::cout << "\nPerformance Results:" << std::endl;
         std::cout << "Naive Block Size: 32x" << tileSize << ", Tile Size: " << tileSize << ", Tile Block Size: 8x32" << std::endl;
