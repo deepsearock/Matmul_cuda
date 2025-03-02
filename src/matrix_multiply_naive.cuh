@@ -30,7 +30,7 @@ inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K, int bloc
     float *d_A, *d_B, *d_C;
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
     
-    dim3 blockDim(blockSize, blockSize, 1);
+    dim3 blockDim(blockSize, 32, 1);
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y, 1);
 
     auto result = measurePerformance([&]() { matrixMulGlobalNaive<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K); }, M, N, K);
