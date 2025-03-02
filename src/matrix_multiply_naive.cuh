@@ -9,17 +9,12 @@
 #include "utils.cuh"
 
 // Naive CUDA kernel for matrix multiplication using only global memory
-__global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N, int K, int blockSize) {
-
-    // Calculate the row index of the C element and A
-    int row = blockIdx.x * blockDim.x + threadIdx.x;
-
-    // Calculate the column index of the C element and B
-    int col = blockIdx.y * blockDim.y + threadIdx.y;
+__global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N, int K) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (row < M && col < N) {
-        float sum = 0;
-        // each thread computes one element of the block sub-matrix
+        float sum = 0.0f;
         for (int k = 0; k < K; ++k) {
             sum += A[row * K + k] * B[k * N + col];
         }
@@ -33,11 +28,9 @@ inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K, int bloc
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
     
     dim3 blockDim(blockSize, blockSize, 1);
+    dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y, 1);
 
-    auto result = measurePerformance([&]() {
-        dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y, 1);
-        matrixMulGlobalNaive<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K, blockSize);
-    }, M, N, K);
+    auto result = measurePerformance([&]() { matrixMulGlobalNaive<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K); }, M, N, K);
     
     freeDeviceMemory(d_A, d_B, d_C);
     return result;
