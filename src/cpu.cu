@@ -7,14 +7,12 @@ int main(int argc, char* argv[]) {
         std::cerr << "Usage: " << argv[0] << " <rowDimA> <colDimA> <colDimB>" << std::endl;
         return 1;
     }
-    
-    double time_sec;
-    double tflops;
 
     int M = std::atoi(argv[1]);
     int N = std::atoi(argv[2]);
     int K = std::atoi(argv[3]);
 
+    // Correct structured binding without prior declaration
     auto [time_sec, tflops] = runMatrixMulNaive(M, N, K);
     
     std::cout << "Matrix multiplication took " << time_sec << " seconds." << std::endl;
@@ -22,3 +20,4 @@ int main(int argc, char* argv[]) {
     
     return 0;
 }
+
