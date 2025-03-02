@@ -13,8 +13,8 @@ template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
 
     // assign shared memory for tile a and tile b
-    __shared__ float tileA[32][32 + 1];  
-    __shared__ float tileB[32][32 + 1];
+    __shared__ float tileA[16][16 + 1];  
+    __shared__ float tileB[16][16 + 1];
 
     // calculate the row and column indexes
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
