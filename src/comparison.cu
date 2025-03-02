@@ -44,20 +44,20 @@ int main(int argc, char *argv[]) {
 
         for (int run = 0; run < 10; ++run) {
             auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, tileSize);
-            totalNaiveTime += naiveResult.second;
-            totalNaiveFlops += naiveResult.first;
+            totalNaiveTime = naiveResult.second;
+            totalNaiveFlops = naiveResult.first;
             //double naiveMemoryBandwidth = memoryVolumeGB / (totalNaiveTime / 1000.0);
 
             auto tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
-            totalTiledTime += tiledResult.second;
-            totalTiledFlops += tiledResult.first;
+            totalTiledTime = tiledResult.second;
+            totalTiledFlops = tiledResult.first;
             //double tiledMemoryBandwidth = memoryVolumeGB / (totalTiledTime / 1000.0);
         }
 
-        double avgNaiveTime = totalNaiveTime / 1000.0;
-        double avgNaiveFlops = totalNaiveFlops / 1000.0;
-        double avgTiledTime = totalTiledTime / 1000.0;
-        double avgTiledFlops = totalTiledFlops / 1000.0;
+        double avgNaiveTime = totalNaiveTime;
+        double avgNaiveFlops = totalNaiveFlops;
+        double avgTiledTime = totalTiledTime;
+        double avgTiledFlops = totalTiledFlops;
 
         std::cout << "\nPerformance Results:" << std::endl;
         std::cout << "Naive Block Size: 32x" << tileSize << ", Tile Size: " << tileSize << ", Tile Block Size: 8x32" << std::endl;
