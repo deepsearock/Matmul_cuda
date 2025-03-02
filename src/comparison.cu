@@ -14,7 +14,6 @@ void printUsage() {
     exit(1);
 }
 
-// Function to retrieve and display GPU specifications
 void printGpuSpecs() {
     cudaDeviceProp prop;
     cudaGetDeviceProperties(&prop, 0);
@@ -28,7 +27,6 @@ void printGpuSpecs() {
 }
 
 int main(int argc, char *argv[]) {
-    // Parse command-line arguments
     if (argc != 5 || std::string(argv[1]) != "-i") {
         printUsage();
     }
@@ -37,52 +35,41 @@ int main(int argc, char *argv[]) {
     int colDimA = std::atoi(argv[3]);
     int colDimB = std::atoi(argv[4]);
 
-    // Print GPU specifications before running tests
     printGpuSpecs();
 
-    // Print matrix dimensions
     std::cout << "Matrix dimensions: " << std::endl;
     std::cout << "  A (" << rowDimA << "x" << colDimA << ")" << std::endl;
     std::cout << "  B (" << colDimA << "x" << colDimB << ")" << std::endl;
     std::cout << "  C (" << rowDimA << "x" << colDimB << ")" << std::endl;
 
-    // List of block sizes and tile sizes to compare
     int blockSizes[] = {8, 16, 32};
     int tileSizes[] = {8, 16, 32};
 
-    // Compute theoretical TFLOPS: (2 * M * N * K) / (1e12) / execution_time
     double numOps = 2.0 * rowDimA * colDimB * colDimA;
+    double memoryVolumeBytes = (rowDimA * colDimA + colDimA * colDimB + rowDimA * colDimB) * sizeof(float);
+    double memoryVolumeGB = memoryVolumeBytes / 1e9;
 
-    // Compare performance for different block and tile sizes
     for (int blockSize : blockSizes) {
         for (int tileSize : tileSizes) {
-            double totalNaiveTime = 0.0;
-            double totalNaiveFlops = 0.0;
-            double totalTiledTime = 0.0;
-            double totalTiledFlops = 0.0;
-
-            // Run once per configuration
             auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, blockSize);
-            totalNaiveTime = naiveResult.second;
-            totalNaiveFlops = naiveResult.first;
+            double totalNaiveTime = naiveResult.second;
+            double totalNaiveFlops = naiveResult.first;
+            double naiveMemoryBandwidth = memoryVolumeGB / (totalNaiveTime / 1000.0);
 
             auto tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
-            totalTiledTime = tiledResult.second;
-            totalTiledFlops = tiledResult.first;
+            double totalTiledTime = tiledResult.second;
+            double totalTiledFlops = tiledResult.first;
+            double tiledMemoryBandwidth = memoryVolumeGB / (totalTiledTime / 1000.0);
 
-            // Compute theoretical TFLOPS
-            double theoreticalNaiveTflops = numOps / (totalNaiveTime * 1e6);
-            double theoreticalTiledTflops = numOps / (totalTiledTime * 1e6);
-
-            // Output results
             std::cout << "\nPerformance Results:" << std::endl;
             std::cout << "Block Size: " << blockSize << ", Tile Size: " << tileSize << std::endl;
             std::cout << "Naive Execution Time (ms): " << totalNaiveTime << std::endl;
             std::cout << "Tiled Execution Time (ms): " << totalTiledTime << std::endl;
-            std::cout << "Naive Performance (TFLOPS): " << totalNaiveFlops << " (Measured), " << theoreticalNaiveTflops << " (Theoretical)" << std::endl;
-            std::cout << "Tiled Performance (TFLOPS): " << totalTiledFlops << " (Measured), " << theoreticalTiledTflops << " (Theoretical)" << std::endl;
+            std::cout << "Naive Performance (TFLOPS): " << totalNaiveFlops << std::endl;
+            std::cout << "Tiled Performance (TFLOPS): " << totalTiledFlops << std::endl;
+            std::cout << "Naive Memory Bandwidth (GB/s): " << naiveMemoryBandwidth << std::endl;
+            std::cout << "Tiled Memory Bandwidth (GB/s): " << tiledMemoryBandwidth << std::endl;
         }
     }
-
     return 0;
 }
