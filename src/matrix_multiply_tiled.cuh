@@ -54,13 +54,13 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     // Launch kernel based on template with fixed TILE_SIZE
     auto result = measurePerformance([&]() {
         switch (tileSize) {
-            case 8:
+            case 32:
                 matrixMulTiled<8><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 32)>>>(d_A, d_B, d_C, M, N, K);
                 break;
-            case 16:
+            case 64:
                 matrixMulTiled<16><<<dim3((N + 63) / 64, (M + 63) / 64), dim3(64, 64)>>>(d_A, d_B, d_C, M, N, K);
                 break;
-            case 32:
+            case 128:
                 matrixMulTiled<32><<<dim3((N + 127) / 128, (M + 127) / 128), dim3(128, 128)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
