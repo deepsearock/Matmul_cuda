@@ -31,6 +31,7 @@ inline void freeDeviceMemory(float *d_A, float *d_B, float *d_C) {
 
 // Function to measure execution time and calculate TFLOPS
 inline std::pair<double, double> measurePerformance(std::function<void()> kernelLaunch, int M, int N, int K) {
+    
     // Record start time
     auto start = std::chrono::high_resolution_clock::now();
     

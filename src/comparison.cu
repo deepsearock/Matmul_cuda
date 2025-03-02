@@ -36,24 +36,36 @@ int main(int argc, char *argv[]) {
     // Compare performance for different block and tile sizes
     for (int blockSize : blockSizes) {
         for (int tileSize : tileSizes) {
-            std::cout << "\nRunning Naive Matrix Multiplication with Block Size: " << blockSize << " and Tile Size: " << tileSize << std::endl;
-            auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, blockSize);
-            std::cout << "Naive Performance: " << std::endl;
-            std::cout << "Execution Time (ms): " << naiveResult.second << std::endl;
-            std::cout << "Performance (TFLOPS): " << naiveResult.first << std::endl;
+            double totalNaiveTime = 0.0;
+            double totalNaiveFlops = 0.0;
+            double totalTiledTime = 0.0;
+            double totalTiledFlops = 0.0;
 
-            std::cout << "\nRunning Tiled Matrix Multiplication with Block Size: " << blockSize << " and Tile Size: " << tileSize << std::endl;
-            auto tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
-            std::cout << "Tiled Performance: " << std::endl;
-            std::cout << "Execution Time (ms): " << tiledResult.second << std::endl;
-            std::cout << "Performance (TFLOPS): " << tiledResult.first << std::endl;
+            // Run the test 10 times
+            for (int i = 0; i < 10; ++i) {
+                std::cout << "\nRunning Naive Matrix Multiplication with Block Size: " << blockSize << " and Tile Size: " << tileSize << " (Run " << i + 1 << ")" << std::endl;
+                auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, blockSize);
+                totalNaiveTime += naiveResult.second;
+                totalNaiveFlops += naiveResult.first;
 
-            // Compare performances
-            std::cout << "\nComparison of Performances:" << std::endl;
-            std::cout << "Naive Execution Time (ms): " << naiveResult.second << std::endl;
-            std::cout << "Tiled Execution Time (ms): " << tiledResult.second << std::endl;
-            std::cout << "Naive Performance (TFLOPS): " << naiveResult.first << std::endl;
-            std::cout << "Tiled Performance (TFLOPS): " << tiledResult.first << std::endl;
+                std::cout << "\nRunning Tiled Matrix Multiplication with Block Size: " << blockSize << " and Tile Size: " << tileSize << " (Run " << i + 1 << ")" << std::endl;
+                auto tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
+                totalTiledTime += tiledResult.second;
+                totalTiledFlops += tiledResult.first;
+            }
+
+            // Calculate averages
+            double avgNaiveTime = totalNaiveTime / 10.0;
+            double avgNaiveFlops = totalNaiveFlops / 10.0;
+            double avgTiledTime = totalTiledTime / 10.0;
+            double avgTiledFlops = totalTiledFlops / 10.0;
+
+            // Output average results
+            std::cout << "\nAverage Performance over 10 Runs:" << std::endl;
+            std::cout << "Naive Execution Time (ms): " << avgNaiveTime << std::endl;
+            std::cout << "Tiled Execution Time (ms): " << avgTiledTime << std::endl;
+            std::cout << "Naive Performance (TFLOPS): " << avgNaiveFlops << std::endl;
+            std::cout << "Tiled Performance (TFLOPS): " << avgTiledFlops << std::endl;
         }
     }
 
