@@ -5,6 +5,7 @@
 #include <iostream>
 #include <chrono>
 #include <functional>
+#include <random>
 
 #define checkCudaErrors(val) checkCuda((val), #val, __FILE__, __LINE__)
 
