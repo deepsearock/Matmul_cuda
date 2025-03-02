@@ -5,6 +5,7 @@
 #include <cuda_runtime.h>
 #include "matrix_multiply_tiled.cuh"
 #include "matrix_multiply_naive.cuh"
+#include "utils.cuh"
 
 void printUsage() {
     std::cout << "Usage: TiledMatrixMul -i <rowDimA> <colDimA> <colDimB>" << std::endl;
@@ -12,20 +13,6 @@ void printUsage() {
     std::cout << "  <colDimA>: Number of columns in matrix A (and number of rows in matrix B)" << std::endl;
     std::cout << "  <colDimB>: Number of columns in matrix B and matrix C" << std::endl;
     exit(1);
-}
-
-void printGpuSpecs() {
-    cudaDeviceProp mygpu;
-    cudaGetDeviceProperties(&mygpu, 0);
-
-    std::cout << "GPU Specifications:" << std::endl;
-    std::cout << "  Name: " << mygpu.name << std::endl;
-    std::cout << "  CUDA Cores per SM: " << mygpu.multiProcessorCount << std::endl;
-    std::cout << "  Number of SMs: " << mygpu.multiProcessorCount << std::endl;
-    std::cout << "  GPU Clock Rate (MHz): " << mygpu.clockRate / 1000.0 << std::endl;
-    std::cout << "  GPU Memory Clock Rate (Mhz): " <<mygpu.memoryClockRate / 1000.0 << std::endl;
-    std::cout << "  Memory Bus Width: " << mygpu.memoryBusWidth << std::endl;
-    std::cout << "  Memory Bandwidth (GB/s): " << mygpu.memoryBusWidth * mygpu.memoryClockRate * 2 / 1.0e6 << std::endl;
 }
 
 int main(int argc, char *argv[]) {

@@ -27,6 +27,20 @@ inline void checkCuda(cudaError_t result, const char *const func, const char *co
     }
 }
 
+void printGpuSpecs() {
+    cudaDeviceProp mygpu;
+    cudaGetDeviceProperties(&mygpu, 0);
+
+    std::cout << "GPU Specifications:" << std::endl;
+    std::cout << "  Name: " << mygpu.name << std::endl;
+    std::cout << "  CUDA Cores per SM: " << mygpu.multiProcessorCount << std::endl;
+    std::cout << "  Number of SMs: " << mygpu.multiProcessorCount << std::endl;
+    std::cout << "  GPU Clock Rate (MHz): " << mygpu.clockRate / 1000.0 << std::endl;
+    std::cout << "  GPU Memory Clock Rate (Mhz): " <<mygpu.memoryClockRate / 1000.0 << std::endl;
+    std::cout << "  Memory Bus Width: " << mygpu.memoryBusWidth << std::endl;
+    std::cout << "  Memory Bandwidth (GB/s): " << mygpu.memoryBusWidth * mygpu.memoryClockRate * 2 / 1.0e6 << std::endl;
+}
+
 // Function to allocate memory for matrices
 inline void allocateDeviceMemory(float **d_A, float **d_B, float **d_C, int M, int N, int K) {
     checkCudaErrors(cudaMalloc((void**)d_A, M * K * sizeof(float)));
