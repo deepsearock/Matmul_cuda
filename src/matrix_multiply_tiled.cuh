@@ -11,49 +11,50 @@
 // Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    // Shared memory for sub-matrices of A and B
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  // Padding added to avoid bank conflicts
+
+    // assign shared memory for tile a and tile b
+    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
     __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
 
-    // Compute row and column indexes
+    // calculate the row and column indexes
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
-    // Initialize sum register
-    float sum = 0.0f;
+    // sum register
+    float sum = 0;
 
     // Iterate over all tiles required to compute C(row, col)
     for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
-        // Load A tile into shared memory
+        // load the a tile into memory
         int tiledRow = row;
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         if (tiledRow < M && tiledColA < K)
             tileA[threadIdx.y][threadIdx.x] = A[tiledRow * K + tiledColA];
         else
-            tileA[threadIdx.y][threadIdx.x] = 0.0f; // Handle boundary condition
+            tileA[threadIdx.y][threadIdx.x] = 0; // if the row and col are smaller than M and K respectively then it is not 0
 
-        // Load B tile into shared memory
+        // load the b tile into memory
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
         int tiledColB = col;
         if (tiledRowB < K && tiledColB < N)
             tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + tiledColB];
         else
-            tileB[threadIdx.y][threadIdx.x] = 0.0f;
+            tileB[threadIdx.y][threadIdx.x] = 0; // if the row and col are smaller than M and K respectively then it is not 0
 
-        // Synchronize threads before computing
+        // synchronize
         __syncthreads();
 
-        // Perform matrix multiplication on loaded tiles
+        // matrix multiplication
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; ++k) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
         
-        // Synchronize before loading new tiles
+        // synchronize before loading new tiles
         __syncthreads();
     }
 
-    // Store the computed value in global memory
+    // computed value is stored in global memory
     if (row < M && col < N) {
         C[row * N + col] = sum;
     }
