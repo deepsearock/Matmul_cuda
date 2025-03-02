@@ -59,24 +59,33 @@ inline void freeDeviceMemory(float *d_A, float *d_B, float *d_C) {
 
 // performance function mainly calcs tflops
 inline std::pair<double, double> measurePerformance(std::function<void()> kernelLaunch, int M, int N, int K) {
+    cudaEvent_t start, stop;
+    float timeMs = 0.0f;
 
-    // start time
-    auto start = std::chrono::high_resolution_clock::now();
-    
-    // launch any kernel loaded into this function
+    // Create CUDA events for timing
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    // Start recording execution time
+    cudaEventRecord(start, 0);
+
+    // Launch the provided kernel function
     kernelLaunch();
-    
-    // check time using cudadevicesynchronize and then stops time
-    checkCudaErrors(cudaDeviceSynchronize());
-    auto end = std::chrono::high_resolution_clock::now();
 
-    // time calculation
-    std::chrono::duration<double, std::milli> duration = end - start;
-    double timeMs = duration.count();
+    // Ensure all GPU operations are complete
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
 
-    // calculate tflops for matrix
+    // Measure elapsed time
+    cudaEventElapsedTime(&timeMs, start, stop);
+
+    // Clean up events
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    // Compute TFLOPS
     double numOps = 2.0 * M * N * K;
-    double tflops = (numOps / (timeMs * 1e9));
+    double tflops = (numOps / (timeMs * 1e6));  // Convert to TFLOPS (1e6 for milliseconds)
 
     return {tflops, timeMs};
 }
