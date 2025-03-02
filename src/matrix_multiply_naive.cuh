@@ -24,7 +24,7 @@ __global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N,
     }
 }
 
-// Function to allocate memory, launch the naive kernel, and measure performance
+// wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K, int blockSize) {
 
     float *d_A, *d_B, *d_C;
