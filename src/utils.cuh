@@ -8,6 +8,17 @@
 
 #define checkCudaErrors(val) checkCuda((val), #val, __FILE__, __LINE__)
 
+
+void populateMatrix(float *matrix, int rows, int cols) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    
+    for (int i = 0; i < rows * cols; ++i) {
+        matrix[i] = dist(gen);
+    }
+}
+
 inline void checkCuda(cudaError_t result, const char *const func, const char *const file, int const line) {
     if (result != cudaSuccess) {
         std::cerr << "CUDA error at " << file << ":" << line << " in " << func << " (" << cudaGetErrorString(result) << ")\n";
@@ -31,7 +42,7 @@ inline void freeDeviceMemory(float *d_A, float *d_B, float *d_C) {
 
 // Function to measure execution time and calculate TFLOPS
 inline std::pair<double, double> measurePerformance(std::function<void()> kernelLaunch, int M, int N, int K) {
-    
+
     // Record start time
     auto start = std::chrono::high_resolution_clock::now();
     
