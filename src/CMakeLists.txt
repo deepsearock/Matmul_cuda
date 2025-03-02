@@ -1,36 +1,27 @@
 cmake_minimum_required(VERSION 3.18)
-project(CUDA_Executables LANGUAGES CUDA CXX)
+project(CUDA_Project LANGUAGES CUDA CXX)
 
 # Set CUDA architecture (modify based on your GPU, or use all supported architectures)
 set(CMAKE_CUDA_ARCHITECTURES 75)
 
-# Find and link CUDA libraries if necessary
+# Enable CUDA compilation with NVCC
+enable_language(CUDA)
+
+# Find CUDA toolkit
 find_package(CUDAToolkit REQUIRED)
 
-#find src
-include_directories(${CUDA_INCLUDE_DIRS})
-include_directories(${PROJECT_SOURCE_DIR}/src)
+# Include directories (modify if headers are elsewhere)
+include_directories(${PROJECT_SOURCE_DIR}/src)  # Change if headers are in a different folder
 
-#comparsion.cu
+# Create separate executables for each CUDA file
 add_executable(comparison comparison.cu)
-set_target_properties(comparison PROPERTIES 
-    CUDA_STANDARD 14
-    CUDA_STANDARD_REQUIRED ON
-)
+set_target_properties(comparison PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(comparison PRIVATE CUDA::cudart)
 
-#cpu.cu
 add_executable(cpu cpu.cu)
-set_target_properties(cpu PROPERTIES 
-    CUDA_STANDARD 14
-    CUDA_STANDARD_REQUIRED ON
-)
+set_target_properties(cpu PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(cpu PRIVATE CUDA::cudart)
 
-#cublas
 add_executable(cublas cublas.cu)
-set_target_properties(cublas PROPERTIES 
-    CUDA_STANDARD 14
-    CUDA_STANDARD_REQUIRED ON
-)
+set_target_properties(cublas PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(cublas PRIVATE CUDA::cudart CUDA::cublas)
