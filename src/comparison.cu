@@ -15,15 +15,15 @@ void printUsage() {
 }
 
 void printGpuSpecs() {
-    cudaDeviceProp prop;
-    cudaGetDeviceProperties(&prop, 0);
+    cudaDeviceProp mygpu;
+    cudaGetDeviceProperties(&mygpu, 0);
 
     std::cout << "GPU Specifications:" << std::endl;
-    std::cout << "  Name: " << prop.name << std::endl;
-    std::cout << "  CUDA Cores per SM: " << prop.multiProcessorCount << std::endl;
-    std::cout << "  Number of SMs: " << prop.multiProcessorCount << std::endl;
-    std::cout << "  GPU Clock Rate (MHz): " << prop.clockRate / 1000.0 << std::endl;
-    std::cout << "  Memory Bandwidth (GB/s): " << prop.memoryBusWidth * prop.memoryClockRate * 2 / 1.0e6 << std::endl;
+    std::cout << "  Name: " << mygpu.name << std::endl;
+    std::cout << "  CUDA Cores per SM: " << mygpu.multiProcessorCount << std::endl;
+    std::cout << "  Number of SMs: " << mygpu.multiProcessorCount << std::endl;
+    std::cout << "  GPU Clock Rate (MHz): " << mygpu.clockRate / 1000.0 << std::endl;
+    std::cout << "  Memory Bandwidth (GB/s): " << mygpu.memoryBusWidth * mygpu.memoryClockRate * 2 / 1.0e6 << std::endl;
 }
 
 int main(int argc, char *argv[]) {
