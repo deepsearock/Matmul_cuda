@@ -28,14 +28,14 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
 
         // Handle boundary conditions: if the thread is out of bounds, load 0
-        tileA[threadIdx.x][threadIdx.y] = (tiledRow < M && tiledColA < K) ? A[tiledRow * K + tiledColA] : 0.0f;
-        tileB[threadIdx.x][threadIdx.y] = (tiledRowB < K && tiledColB < N) ? B[tiledRowB * N + tiledColB] : 0.0f;
+        tileA[threadIdx.y][threadIdx.x] = (tiledRow < M && tiledColA < K) ? A[tiledRow * K + tiledColA] : 0.0f;
+        tileB[threadIdx.y][threadIdx.x] = (tiledRowB < K && tiledColB < N) ? B[tiledRowB * N + tiledColB] : 0.0f;
 
         __syncthreads();  // Ensure that all threads have loaded their respective tiles
 
         // Compute the sum for this block of C
         for (int k = 0; k < TILE_SIZE; ++k) {
-            sum += tileA[threadIdx.x][k] * tileB[k][threadIdx.y];
+            sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
         __syncthreads();  // Synchronize threads before loading the next tile
     }
