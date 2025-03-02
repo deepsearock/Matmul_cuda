@@ -12,12 +12,14 @@ int main(int argc, char* argv[]) {
     int N = std::atoi(argv[2]);
     int K = std::atoi(argv[3]);
 
-    // Correct structured binding without prior declaration
-    auto [time_sec, tflops] = runMatrixMulNaive(M, N, K);
+    // Store the result in a pair
+    std::pair<double, double> result = runMatrixMulNaive(M, N, K);
     
+    double time_sec = result.first;
+    double tflops = result.second;
+
     std::cout << "Matrix multiplication took " << time_sec << " seconds." << std::endl;
     std::cout << "Performance: " << tflops << " TFLOPS." << std::endl;
     
     return 0;
 }
-
