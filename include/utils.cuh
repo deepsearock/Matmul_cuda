@@ -29,6 +29,19 @@ inline void checkCuda(cudaError_t result, const char *const func, const char *co
     }
 }
 
+
+void matrixMulCPU(const float* A, const float* B, float* C, int M, int N, int K) {
+    for (int i = 0; i < M; ++i) {
+        for (int j = 0; j < N; ++j) {
+            float sum = 0.0f;
+            for (int k = 0; k < K; ++k) {
+                sum += A[i * K + k] * B[k * N + j];
+            }
+            C[i * N + j] = sum;
+        }
+    }
+}
+
 // print to terminal gpu specs
 void printGpuSpecs() {
     cudaDeviceProp mygpu;
@@ -87,7 +100,7 @@ inline std::pair<double, double> measurePerformance(std::function<void()> kernel
     cudaEvent_t start, stop;
     float timeMs = 0.0f;
 
-    // Create CUDA events for timing
+    // create some cuda events
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
@@ -97,18 +110,18 @@ inline std::pair<double, double> measurePerformance(std::function<void()> kernel
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
 
-    // Measure elapsed time
+    // calculate the elapsed time
     cudaEventElapsedTime(&timeMs, start, stop);
 
-    // Clean up events
+    // destroy the events
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 
-    // Compute TFLOPS
+    // tflops calc
     double numOps = 2.0 * M * N * K;
-    double gflops = (numOps / (timeMs * 1e9));  // Convert to TFLOPS (1e6 for milliseconds)
+    double tflops = (numOps / (timeMs * 1e9));  // Convert to TFLOPS (1e6 for milliseconds)
 
-    return {gflops, timeMs};
+    return {tflops, timeMs};
 }
 
 #endif

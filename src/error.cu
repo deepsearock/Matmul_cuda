@@ -1,0 +1,48 @@
+#include <iostream>
+#include <cstdlib>
+#include <ctime>
+#include "matrix_multiply_naive.cuh"
+#include "matrix_multiply_tiled.cuh"
+
+int main() {
+    // Set matrix dimensions
+    int M = 1024;  // Number of rows in A and C
+    int N = 1024;  // Number of columns in B and C
+    int K = 1024;  // Number of columns in A and rows in B
+
+    int tileSize = 32;  // Tile size for tiled matrix multiplication
+
+    std::cout << "==========================================" << std::endl;
+    std::cout << "      MATRIX MULTIPLICATION TEST" << std::endl;
+    std::cout << "==========================================" << std::endl;
+    std::cout << "Matrix Dimensions: " << M << " x " << N << " x " << K << std::endl;
+
+    // Run naive matrix multiplication with error check
+    std::cout << "\nRunning Naïve GPU Matrix Multiplication..." << std::endl;
+    auto naive_result = runMatrixMulNaiveWithErrorCheck(M, N, K, 8, 32);
+
+    // Run tiled matrix multiplication with error check
+    std::cout << "\nRunning Tiled GPU Matrix Multiplication (Tile Size = " << tileSize << ")..." << std::endl;
+    auto tiled_result = runMatrixMulTiledWithErrorCheck(M, N, K, tileSize);
+
+    // Print performance results
+    std::cout << "\n==========================================" << std::endl;
+    std::cout << "           PERFORMANCE RESULTS" << std::endl;
+    std::cout << "==========================================" << std::endl;
+    std::cout << "Naïve Kernel Execution Time: " << naive_result.first << " ms" << std::endl;
+    std::cout << "Tiled Kernel Execution Time: " << tiled_result.first << " ms" << std::endl;
+
+    std::cout << "\n==========================================" << std::endl;
+    std::cout << "             SPEEDUP FACTOR" << std::endl;
+    std::cout << "==========================================" << std::endl;
+    double speedup = naive_result.first / tiled_result.first;
+    std::cout << "Tiled Speedup Over Naïve: " << speedup << "x" << std::endl;
+
+    std::cout << "\n==========================================" << std::endl;
+    std::cout << "           ACCURACY COMPARISON" << std::endl;
+    std::cout << "==========================================" << std::endl;
+    std::cout << "Naïve Mean Squared Error: " << naive_result.second << std::endl;
+    std::cout << "Tiled Mean Squared Error: " << tiled_result.second << std::endl;
+
+    return 0;
+}

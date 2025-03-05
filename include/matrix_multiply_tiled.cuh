@@ -87,4 +87,67 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     return result;
 }
 
+inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K, int tileSize) {
+    float *d_A, *d_B, *d_C;
+    float *h_A = new float[M * K];
+    float *h_B = new float[K * N];
+    float *h_C = new float[M * N];
+    float *h_C_ref = new float[M * N];
+
+    // Initialize host memory with random values
+    for (int i = 0; i < M * K; ++i) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
+    for (int i = 0; i < K * N; ++i) h_B[i] = static_cast<float>(rand()) / RAND_MAX;
+
+    // Allocate and copy memory to device
+    allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
+    cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
+
+    // Launch the kernel
+    auto result = measurePerformance([&]() {
+        switch (tileSize) {
+            case 8:
+                matrixMulTiled<8><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
+                break;
+            case 16:
+                matrixMulTiled<16><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
+                break;
+            case 32:
+                matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
+                break;
+            default:
+                std::cerr << "Unsupported tile size" << std::endl;
+                exit(EXIT_FAILURE);
+        }
+    }, M, N, K);
+
+    // Copy results back to host
+    cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Compute CPU reference result
+    matrixMulCPU(h_A, h_B, h_C_ref, M, N, K);
+
+    // Compute error metrics
+    double mse = 0.0, max_error = 0.0;
+    for (int i = 0; i < M * N; ++i) {
+        double diff = fabs(h_C[i] - h_C_ref[i]);
+        mse += diff * diff;
+        max_error = std::max(max_error, diff);
+    }
+    mse /= (M * N);
+
+    // Print error results
+    std::cout << "Mean Squared Error: " << mse << std::endl;
+    std::cout << "Max Absolute Error: " << max_error << std::endl;
+
+    // Clean up
+    freeDeviceMemory(d_A, d_B, d_C);
+    delete[] h_A;
+    delete[] h_B;
+    delete[] h_C;
+    delete[] h_C_ref;
+
+    return result;
+}
+
 #endif

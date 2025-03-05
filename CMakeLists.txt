@@ -12,7 +12,9 @@ enable_language(CUDA)
 find_package(CUDAToolkit REQUIRED)
 
 # Include directories (modify if headers are elsewhere)
+
 include_directories(${PROJECT_SOURCE_DIR}/src)  # Change if headers are in a different folder
+include_directories(${PROJECT_SOURCE_DIR}/include)  # Change if headers are in a different folder
 
 # Create separate executables for each CUDA file
 add_executable(comparison comparison.cu)
@@ -26,3 +28,7 @@ target_link_libraries(cpu PRIVATE CUDA::cudart)
 add_executable(cublas cublas.cu)
 set_target_properties(cublas PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(cublas PRIVATE CUDA::cudart CUDA::cublas)
+
+add_executable(error error.cu)
+set_target_properties(error PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+target_link_libraries(error PRIVATE CUDA::cudart)
