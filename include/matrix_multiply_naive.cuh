@@ -79,10 +79,10 @@ inline std::pair<double, double> runMatrixMulNaiveWithErrorCheck(int M, int N, i
         max_error = std::max(max_error, diff);
     }
     mse /= (M * N);
+    results.push_back(mse);
+    results.push_back(max_error);
 
-    // Print error results
-    std::cout << "Naïve Matrix Multiplication - Mean Squared Error: " << mse << std::endl;
-    std::cout << "Naïve Matrix Multiplication - Max Absolute Error: " << max_error << std::endl;
+
 
     // Free memory
     freeDeviceMemory(d_A, d_B, d_C);

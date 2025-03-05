@@ -33,20 +33,22 @@ int main() {
     std::cout << "\n==========================================" << std::endl;
     std::cout << "           PERFORMANCE RESULTS" << std::endl;
     std::cout << "==========================================" << std::endl;
-    std::cout << "Naïve Kernel Execution Time: " << naive_result.first << " ms" << std::endl;
-    std::cout << "Tiled Kernel Execution Time: " << tiled_result.first << " ms" << std::endl;
+    std::cout << "Naïve Kernel Execution Time: " << naive_result.second << " ms" << std::endl;
+    std::cout << "Tiled Kernel Execution Time: " << tiled_result.second << " ms" << std::endl;
 
     std::cout << "\n==========================================" << std::endl;
     std::cout << "             SPEEDUP FACTOR" << std::endl;
     std::cout << "==========================================" << std::endl;
-    double speedup = naive_result.first / tiled_result.first;
+    double speedup = tiled_result.first / naive.first;
     std::cout << "Tiled Speedup Over Naïve: " << speedup << "x" << std::endl;
 
     std::cout << "\n==========================================" << std::endl;
     std::cout << "           ACCURACY COMPARISON" << std::endl;
     std::cout << "==========================================" << std::endl;
-    std::cout << "Naïve Mean Squared Error: " << naive_result.second << std::endl;
-    std::cout << "Tiled Mean Squared Error: " << tiled_result.second << std::endl;
+    std::cout << "Naïve Mean Squared Error: " << naive_result.third << std::endl;
+    std::cout << "Tiled Mean Squared Error: " << tiled_result.third << std::endl;
+    std::cout << "Naïve Max Error: " << naive_result.fourth << std::endl;
+    std::cout << "Tiled Max Error: " << tiled_result.fourth << std::endl;
 
     return 0;
 }
