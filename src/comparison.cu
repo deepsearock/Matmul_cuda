@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
     // double memoryVolumeGB = memoryVolumeBytes / 1e9;
 
     
-    int tileSize[] = {8, 16, 32};
+    int tileSizes[] = {8, 16, 32};
     std::pair<int, int> blockConfigs[] = {{8, 32}, {32, 8}};
 
     for (int tileSize : tileSizes) {
