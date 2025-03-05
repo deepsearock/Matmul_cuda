@@ -21,46 +21,49 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
      // Each thread computes multiple outputs
-     float sum[4] = {0, 0, 0, 0};
+     float sum[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
-     // Iterate over tiles
-     for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
-         // Load tiles into shared memory
-         int tiledRow = row;
-         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
-         if (tiledRow < M && tiledColA < K)
-             tileA[threadIdx.y][threadIdx.x] = A[tiledRow * K + tiledColA];
-         else
-             tileA[threadIdx.y][threadIdx.x] = 0.0f;
- 
-         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
-         int tiledColB = col;
-         if (tiledRowB < K && tiledColB < N)
-             tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + tiledColB];
-         else
-             tileB[threadIdx.y][threadIdx.x] = 0.0f;
- 
-         __syncthreads();
- 
-         // Each thread computes 4 results using loop unrolling
-         #pragma unroll
-         for (int k = 0; k < TILE_SIZE; ++k) {
-             sum[0] += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
-             sum[1] += tileA[threadIdx.y + 8][k] * tileB[k][threadIdx.x];
-             sum[2] += tileA[threadIdx.y + 16][k] * tileB[k][threadIdx.x];
-             sum[3] += tileA[threadIdx.y + 24][k] * tileB[k][threadIdx.x];
-         }
- 
-         __syncthreads();
-     }
- 
-     // Store results back in global memory
-     if (row < M && col < N) {
-         C[row * N + col] = sum[0];
-         if (row + 8 < M)  C[(row + 8) * N + col] = sum[1];
-         if (row + 16 < M) C[(row + 16) * N + col] = sum[2];
-         if (row + 24 < M) C[(row + 24) * N + col] = sum[3];
-     }
+    // Iterate over tiles
+    for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
+        // Load tiles into shared memory
+        int tiledRowA = row;
+        int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
+        if (tiledRowA < M && tiledColA < K)
+            tileA[threadIdx.y][threadIdx.x] = A[tiledRowA * K + tiledColA];
+        else
+            tileA[threadIdx.y][threadIdx.x] = 0.0f;
+
+        int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
+        int tiledColB = col;
+        if (tiledRowB < K && tiledColB < N)
+            tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + tiledColB];
+        else
+            tileB[threadIdx.y][threadIdx.x] = 0.0f;
+
+        __syncthreads();
+
+        // Perform matrix multiplication using loop unrolling
+        #pragma unroll
+        for (int k = 0; k < TILE_SIZE; ++k) {
+            sum[0] += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
+            if (threadIdx.y + 8 < TILE_SIZE)  
+                sum[1] += tileA[threadIdx.y + 8][k] * tileB[k][threadIdx.x];
+            if (threadIdx.y + 16 < TILE_SIZE) 
+                sum[2] += tileA[threadIdx.y + 16][k] * tileB[k][threadIdx.x];
+            if (threadIdx.y + 24 < TILE_SIZE) 
+                sum[3] += tileA[threadIdx.y + 24][k] * tileB[k][threadIdx.x];
+        }
+
+        __syncthreads();
+    }
+
+    // Store results back in global memory safely
+    if (row < M && col < N) {
+        C[row * N + col] = sum[0];
+        if (row + 8 < M)  C[(row + 8) * N + col] = sum[1];
+        if (row + 16 < M) C[(row + 16) * N + col] = sum[2];
+        if (row + 24 < M) C[(row + 24) * N + col] = sum[3];
+    }
 }
 
 // wrapper function that measures performance and does memory management
