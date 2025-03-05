@@ -1,7 +1,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
-#include "utils.h"
+#include "utils.cuh"
 #include "matrix_multiply_naive.cuh"
 #include "matrix_multiply_tiled.cuh"
 
