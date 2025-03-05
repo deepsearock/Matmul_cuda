@@ -79,8 +79,8 @@ inline std::pair<double, double> runMatrixMulNaiveWithErrorCheck(int M, int N, i
         max_error = std::max(max_error, diff);
     }
     mse /= (M * N);
-    results.push_back(mse);
-    results.push_back(max_error);
+    result.push_back(mse);
+    result.push_back(max_error);
 
 
 
