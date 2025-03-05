@@ -13,8 +13,19 @@ find_package(CUDAToolkit REQUIRED)
 
 # Include directories (modify if headers are elsewhere)
 
-include_directories(${PROJECT_SOURCE_DIR}/src)  # Change if headers are in a different folder
-include_directories(${PROJECT_SOURCE_DIR}/include)  # Change if headers are in a different folder
+set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
+set(INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include)
+
+# Include directories
+include_directories(${INCLUDE_DIR})
+
+# Define source files
+set(SOURCES
+    ${SRC_DIR}/comparison.cu
+    ${SRC_DIR}/cpu.cu
+    ${SRC_DIR}/cublas.cu
+    ${SRC_DIR}/error.cu
+)
 
 # Create separate executables for each CUDA file
 add_executable(comparison comparison.cu)
