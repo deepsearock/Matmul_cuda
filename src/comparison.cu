@@ -31,13 +31,6 @@ int main(int argc, char *argv[]) {
     std::cout << "  B (" << colDimA << "x" << colDimB << ")" << std::endl;
     std::cout << "  C (" << rowDimA << "x" << colDimB << ")" << std::endl;
 
-    // int blockSizes[] = {8, 16, 32};
-    int tileSizes[] = {8, 16, 32};
-
-    // double memoryVolumeBytes = (rowDimA * colDimA + colDimA * colDimB + rowDimA * colDimB) * sizeof(float);
-    // double memoryVolumeGB = memoryVolumeBytes / 1e9;
-
-    
     int tileSizes[] = {8, 16, 32};
     std::pair<int, int> blockConfigs[] = {{8, 32}, {32, 8}};
 
