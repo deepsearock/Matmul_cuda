@@ -28,18 +28,18 @@ set(SOURCES
 )
 
 # Create separate executables for each CUDA file
-add_executable(comparison comparison.cu)
+add_executable(comparison ./src/comparison.cu)
 set_target_properties(comparison PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(comparison PRIVATE CUDA::cudart)
 
-add_executable(cpu cpu.cu)
+add_executable(cpu ./src/cpu.cu)
 set_target_properties(cpu PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(cpu PRIVATE CUDA::cudart)
 
-add_executable(cublas cublas.cu)
+add_executable(cublas ./src/cublas.cu)
 set_target_properties(cublas PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(cublas PRIVATE CUDA::cudart CUDA::cublas)
 
-add_executable(error error.cu)
+add_executable(error ./src/error.cu)
 set_target_properties(error PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(error PRIVATE CUDA::cudart)
