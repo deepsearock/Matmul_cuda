@@ -135,8 +135,11 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
         max_error = std::max(max_error, diff);
     }
     mse /= (M * N);
-    result.push_back(mse);
-    result.push_back(max_error);
+
+    // Print error results
+    std::cout << "Mean Squared Error: " << mse << std::endl;
+    std::cout << "Max Absolute Error: " << max_error << std::endl;
+
     // Clean up
     freeDeviceMemory(d_A, d_B, d_C);
     delete[] h_A;
