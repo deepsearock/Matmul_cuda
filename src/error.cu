@@ -39,7 +39,7 @@ int main() {
     std::cout << "\n==========================================" << std::endl;
     std::cout << "             SPEEDUP FACTOR" << std::endl;
     std::cout << "==========================================" << std::endl;
-    double speedup = tiled_result.first / naive.first;
+    double speedup = tiled_result.first / naive_result.first;
     std::cout << "Tiled Speedup Over Naïve: " << speedup << "x" << std::endl;
 
     return 0;
