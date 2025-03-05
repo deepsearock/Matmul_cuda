@@ -21,7 +21,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
     // sum register
-    float sum = 0;
+    float sum = 0.0f;
 
     // Iterate over all tiles required to compute C(row, col)
     for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
@@ -135,6 +135,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
         max_error = std::max(max_error, diff);
     }
     mse /= (M * N);
+    
 
     // Print error results
     std::cout << "Mean Squared Error: " << mse << std::endl;
