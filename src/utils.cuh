@@ -43,6 +43,30 @@ void printGpuSpecs() {
     std::cout << "  Memory Bandwidth (GB/s): " << mygpu.memoryBusWidth * mygpu.memoryClockRate * 2 / 1.0e6 << std::endl;
 }
 
+
+void gpuselect(int device) {
+    int deviceCount;
+    cudaGetDeviceCount(&deviceCount);
+    if (deviceCount == 0) {
+        std::cerr << "No CUDA-capable device found!" << std::endl;
+        exit(1);
+    }
+
+    std::cout << "Available CUDA devices:\n";
+    for (int i = 0; i < deviceCount; i++) {
+        cudaDeviceProp prop;
+        cudaGetDeviceProperties(&prop, i);
+        std::cout << "  GPU " << i << ": " << prop.name << " (Compute Capability: " 
+                  << prop.major << "." << prop.minor << ")\n";
+    }
+
+    // Select GPU
+    int selectedDevice = device;  // Change this value if needed
+    cudaSetDevice(selectedDevice);
+    cudaGetDeviceProperties(&prop, selectedDevice);
+    std::cout << "Using GPU " << selectedDevice << ": " << prop.name << "\n";
+}
+
 // memory allocation function on gpu
 inline void allocateDeviceMemory(float **d_A, float **d_B, float **d_C, int M, int N, int K) {
     checkCudaErrors(cudaMalloc((void**)d_A, M * K * sizeof(float)));

@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
     int colDimB = std::atoi(argv[4]);
 
     printGpuSpecs();
-
+    gpuselect(2);
     std::cout << "Matrix dimensions: " << std::endl;
     std::cout << "  A (" << rowDimA << "x" << colDimA << ")" << std::endl;
     std::cout << "  B (" << colDimA << "x" << colDimB << ")" << std::endl;
