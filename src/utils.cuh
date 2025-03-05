@@ -4,6 +4,7 @@
 #include <cuda_runtime.h>
 #include <iostream>
 #include <chrono>
+#include <cstdlib>
 #include <functional>
 #include <random>
 
@@ -53,8 +54,8 @@ void gpuselect(int device) {
     }
 
     std::cout << "Available CUDA devices:\n";
+    cudaDeviceProp prop;
     for (int i = 0; i < deviceCount; i++) {
-        cudaDeviceProp prop;
         cudaGetDeviceProperties(&prop, i);
         std::cout << "  GPU " << i << ": " << prop.name << " (Compute Capability: " 
                   << prop.major << "." << prop.minor << ")\n";
