@@ -110,7 +110,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
                 matrixMulTiled<8><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                matrixMulTiled<16><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<16><<<dim3((N + 15) / 16, (M + 15) / 16), dim3(16, 16)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
                 matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
