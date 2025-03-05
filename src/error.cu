@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
+#inclujde "utils.h"
 #include "matrix_multiply_naive.cuh"
 #include "matrix_multiply_tiled.cuh"
 
@@ -11,6 +12,9 @@ int main() {
     int K = 1024;  // Number of columns in A and rows in B
 
     int tileSize = 32;  // Tile size for tiled matrix multiplication
+
+    printGpuSpecs();
+    gpuselect(2);
 
     std::cout << "==========================================" << std::endl;
     std::cout << "      MATRIX MULTIPLICATION TEST" << std::endl;

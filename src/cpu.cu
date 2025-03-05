@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
     int K = std::atoi(argv[3]);
 
     // Store the result in a pair
-    std::pair<double, double> result = runMatrixMulNaive(M, N, K);
+    std::pair<double, double> result = runMatrixMulCPU(M, N, K);
     
     double time_sec = result.first;
     double tflops = result.second;

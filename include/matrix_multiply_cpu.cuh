@@ -34,7 +34,7 @@ inline void generateMatrix(float* matrix, int rows, int cols) {
 }
 
 // Function to run matrix multiplication and return execution time and TFLOPS
-inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K) {
+inline std::pair<double, double> runMatrixMulCPU(int M, int N, int K) {
     float* A = new float[M * N];
     float* B = new float[N * K];
     float* C = new float[M * K];
