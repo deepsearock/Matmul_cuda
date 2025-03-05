@@ -42,13 +42,5 @@ int main() {
     double speedup = tiled_result.first / naive.first;
     std::cout << "Tiled Speedup Over Naïve: " << speedup << "x" << std::endl;
 
-    std::cout << "\n==========================================" << std::endl;
-    std::cout << "           ACCURACY COMPARISON" << std::endl;
-    std::cout << "==========================================" << std::endl;
-    std::cout << "Naïve Mean Squared Error: " << naive_result.third << std::endl;
-    std::cout << "Tiled Mean Squared Error: " << tiled_result.third << std::endl;
-    std::cout << "Naïve Max Error: " << naive_result.fourth << std::endl;
-    std::cout << "Tiled Max Error: " << tiled_result.fourth << std::endl;
-
     return 0;
 }
