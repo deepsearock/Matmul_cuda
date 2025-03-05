@@ -42,7 +42,10 @@ int main(int argc, char *argv[]) {
     std::pair<int, int> blockConfigs[] = {{8, 32}, {32, 8}};
 
     for (int tileSize : tileSizes) {
-        for (auto [blockWidth, blockHeight] : blockConfigs) {
+        for (size_t i = 0; i < 2; i++) { // Fix structured bindings issue
+            int blockWidth = blockConfigs[i].first;
+            int blockHeight = blockConfigs[i].second;
+
             double totalNaiveTime = 0.0, totalNaiveFlops = 0.0;
             double totalTiledTime = 0.0, totalTiledFlops = 0.0;
 
