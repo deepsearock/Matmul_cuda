@@ -3,10 +3,11 @@ project(CUDA_Project LANGUAGES CUDA CXX)
 
 # Set CUDA architecture (modify based on your GPU, or use all supported architectures)
 set(CMAKE_CUDA_ARCHITECTURES 70)
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -Xptxas -dlcm=ca --use_fast_math -lineinfo")
 
 # Enable CUDA compilation with NVCC
 enable_language(CUDA)
-
+ 
 # Find CUDA toolkit
 find_package(CUDAToolkit REQUIRED)
 

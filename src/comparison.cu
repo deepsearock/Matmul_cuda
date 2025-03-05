@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
         double totalTiledTime = 0.0, totalTiledFlops = 0.0;
 
         for (int run = 0; run < 10; ++run) {
-            auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, tileSize);
+            auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, 32, tileSize);
             totalNaiveTime = naiveResult.second;
             totalNaiveFlops = naiveResult.first;
             //double naiveMemoryBandwidth = memoryVolumeGB / (totalNaiveTime / 1000.0);

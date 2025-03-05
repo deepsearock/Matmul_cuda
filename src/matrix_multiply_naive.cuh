@@ -9,8 +9,10 @@
 #include "utils.cuh"
 #include <random>
 
-// Naive CUDA kernel for matrix multiplication using only global memory
+// naive 
 __global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N, int K) {
+    
+    //calculate index
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -25,12 +27,12 @@ __global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N,
 }
 
 // wrapper function that measures performance and does memory management
-inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K, int blockSize) {
+inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K, int blockWidth, int blockHeight) {
 
     float *d_A, *d_B, *d_C;
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
     
-    dim3 blockDim(blockSize, 32, 1);
+    dim3 blockDim(blockWidth, blockHeight, 1);
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y, 1);
 
     auto result = measurePerformance([&]() { matrixMulGlobalNaive<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K); }, M, N, K);
