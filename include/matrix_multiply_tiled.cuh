@@ -31,7 +31,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         if (tiledRow < M && tiledColA < K)
             tileA[threadIdx.y][threadIdx.x] = A[tiledRow * K + tiledColA];
         else
-            tileA[threadIdx.y][threadIdx.x] = 0; // if the row and col are smaller than M and K respectively then it is not 0
+            tileA[threadIdx.y][threadIdx.x] = 0.0f; // if the row and col are smaller than M and K respectively then it is not 0
 
         // load the b tile into memory
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
@@ -39,7 +39,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         if (tiledRowB < K && tiledColB < N)
             tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + tiledColB];
         else
-            tileB[threadIdx.y][threadIdx.x] = 0; // if the row and col are smaller than N and K respectively then it is not 0
+            tileB[threadIdx.y][threadIdx.x] = 0.0f; // if the row and col are smaller than N and K respectively then it is not 0
 
         // synchronize
         __syncthreads();
