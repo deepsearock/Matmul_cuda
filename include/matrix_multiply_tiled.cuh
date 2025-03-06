@@ -15,7 +15,7 @@
 // This version uses padding for the B tile to reduce bank conflicts,
 // unrolls the inner loop, and uses __restrict__ qualifiers.
 template <int TILE_SIZE>
-__global__ void matrixMulTiledFlexible(float *A, float *B, float *C, int M, int N, int K) {
+__global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
     // Block indices: each block computes a TILE_SIZE x TILE_SIZE submatrix of C.
     int bx = blockIdx.x;
     int by = blockIdx.y;
