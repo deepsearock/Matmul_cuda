@@ -12,8 +12,8 @@
 // Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    __shared__ float tileA[TILE_SIZE][8 + 1];  // Padding to prevent bank conflicts
-    __shared__ float tileB[TILE_SIZE][8 + 1];
+    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  // Padding to prevent bank conflicts
+    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
 
     // Compute row and column of the output matrix
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
