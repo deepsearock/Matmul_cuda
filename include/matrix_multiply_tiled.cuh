@@ -15,62 +15,65 @@
 // This version uses padding for the B tile to reduce bank conflicts,
 // unrolls the inner loop, and uses __restrict__ qualifiers.
 template <int TILE_SIZE>
-__global__ void matrixMulTiled(const float *__restrict__ A,const float *__restrict__ B,float *__restrict__ C, int M, int N, int K) {
-    // Block indices determine the tile of C computed by this block.
+__global__ void matrixMulTiledFlexible(float *A, float *B, float *C, int M, int N, int K) {
+    // Block indices: each block computes a TILE_SIZE x TILE_SIZE submatrix of C.
     int bx = blockIdx.x;
     int by = blockIdx.y;
     int tx = threadIdx.x;
     int ty = threadIdx.y;
 
-    // The starting row and column for the tile in C.
-    int rowBlock = by * TILE_SIZE;
-    int colBlock = bx * TILE_SIZE;
+    // Starting row and column for this C tile.
+    int rowTile = by * TILE_SIZE;
+    int colTile = bx * TILE_SIZE;
+    // Global column index for C computed by this thread.
+    int col = colTile + tx;
 
-    // Compute how many rows in the tile each thread is responsible for.
-    // Each thread starting at threadIdx.y computes rows at stride blockDim.y.
+    // Determine how many output rows in the tile each thread computes.
     int numRows = (TILE_SIZE + blockDim.y - 1) / blockDim.y;
 
-    // Local accumulation registers.
-    // We allocate TILE_SIZE elements (the maximum possible) but only use the first numRows.
+    // Allocate a local accumulation array.
+    // We allocate TILE_SIZE entries (a compile‑time constant) but only use the first numRows.
     float accum[TILE_SIZE];
-    #pragma unroll
-    for (int i = 0; i < TILE_SIZE; i++) {
+    for (int i = 0; i < numRows; i++) {
         accum[i] = 0.0f;
     }
 
-    // Shared memory tiles.
-    // For A, a standard tile.
+    // Declare shared memory for the A and B tiles.
     __shared__ float As[TILE_SIZE][TILE_SIZE];
-    // For B, pad the second dimension by 1 to avoid bank conflicts.
-    __shared__ float Bs[TILE_SIZE][TILE_SIZE + 1];
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];
 
-    // Number of tiles required in the K dimension.
+    // Number of tiles in the K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
-
     for (int t = 0; t < numTiles; t++) {
-        // Load the A tile: each thread loads multiple rows (with stride blockDim.y).
+        // --- Load tile of A ---
+        // Each thread loads multiple rows from A into shared memory.
         for (int i = ty; i < TILE_SIZE; i += blockDim.y) {
-            int aRow = rowBlock + i;
-            int aCol = t * TILE_SIZE + tx;
-            As[i][tx] = (aRow < M && aCol < K) ? A[aRow * K + aCol] : 0.0f;
+            int row = rowTile + i;
+            int colA = t * TILE_SIZE + tx;
+            if (row < M && colA < K)
+                As[i][tx] = A[row * K + colA];
+            else
+                As[i][tx] = 0.0f;
         }
 
-        // Load the B tile: each thread loads multiple rows.
+        // --- Load tile of B ---
+        // Each thread loads multiple rows from B into shared memory.
         for (int i = ty; i < TILE_SIZE; i += blockDim.y) {
-            int bRow = t * TILE_SIZE + i;
-            int bCol = colBlock + tx;
-            Bs[i][tx] = (bRow < K && bCol < N) ? B[bRow * N + bCol] : 0.0f;
+            int rowB = t * TILE_SIZE + i;
+            if (rowB < K && col < N)
+                Bs[i][tx] = B[rowB * N + col];
+            else
+                Bs[i][tx] = 0.0f;
         }
 
         __syncthreads();
 
-        // Compute the partial products.
-        // Unroll the loop over the shared dimension.
-        #pragma unroll
+        // --- Compute partial products ---
+        // Each thread computes numRows output elements (one per micro‑tile row).
         for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = Bs[k][tx];
-            // Each thread computes its micro-tile: rows given by (ty + i * blockDim.y)
             for (int i = 0; i < numRows; i++) {
+                // Compute the row within the tile for this micro‑tile element.
                 int rowInTile = ty + i * blockDim.y;
                 if (rowInTile < TILE_SIZE) {
                     accum[i] += As[rowInTile][k] * bVal;
@@ -81,15 +84,14 @@ __global__ void matrixMulTiled(const float *__restrict__ A,const float *__restri
         __syncthreads();
     }
 
-    // Write the accumulated results to global memory.
+    // --- Write results back to global memory ---
     for (int i = 0; i < numRows; i++) {
-        int row = rowBlock + ty + i * blockDim.y;
-        int col = colBlock + tx;
-        if (row < M && col < N) {
+        int row = rowTile + ty + i * blockDim.y;
+        if (row < M && col < N)
             C[row * N + col] = accum[i];
-        }
     }
 }
+
 
 
 
