@@ -62,8 +62,8 @@ int main(int argc, char *argv[]) {
             std::cout << "Naive Block Size: " << blockWidth << "x" << blockHeight << std::endl;
             std::cout << "Naive Execution Time (ms): " << avgNaiveTime << std::endl;
             std::cout << "Tiled Execution Time (ms): " << avgTiledTime << std::endl;
-            std::cout << "Naive Performance (GFLOPS): " << avgNaiveFlops << std::endl;
-            std::cout << "Tiled Performance (GFLOPS): " << avgTiledFlops << std::endl;
+            std::cout << "Naive Performance (TFLOPS): " << avgNaiveFlops << std::endl;
+            std::cout << "Tiled Performance (TFLOPS): " << avgTiledFlops << std::endl;
         }
     }
     
