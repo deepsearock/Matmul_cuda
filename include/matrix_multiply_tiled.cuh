@@ -8,16 +8,15 @@
 #include <cmath>
 #include <algorithm>
 #include "utils.cuh"
-
+define WARP_SIZE 32
 // Tiled CUDA kernel for matrix multiplication using shared memory
-template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  // Avoid bank conflicts
+    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
     __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
 
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
-    float sum = 0.0f;
+    float sum = 0.0f, c = 0.0f;
 
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
@@ -25,8 +24,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
 
-        // Load global memory into shared memory using row-stripe loading
-        for (int i = 0; i < TILE_SIZE; i += 32) {
+        for (int i = 0; i < TILE_SIZE; i += WARP_SIZE) {
             if (row + i < M && tiledColA < K) {
                 tileA[threadIdx.y + i][threadIdx.x] = A[(row + i) * K + tiledColA];
             } else {
@@ -40,18 +38,22 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
             }
         }
 
-        __syncthreads();
+        __syncthreads();  // Prevent stale reads
 
-        // Unrolled computation loop
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
-            sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
+            float y = tileA[threadIdx.y][k] * tileB[k][threadIdx.x] - c;
+            float t = sum + y;
+            c = (t - sum) - y;
+            sum = t;
         }
     }
 
-    if (row < M && col < N)
+    if (row < M && col < N) {
         C[row * N + col] = sum;
+    }
 }
+
 
 
 // wrapper function that measures performance and does memory management
@@ -71,6 +73,9 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
             break;
         case 32:
             cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32>, 0, 0);
+            break;
+        case 64:
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<64>, 0, 0);
             break;
         default:
             std::cerr << "Unsupported tile size" << std::endl;
@@ -92,6 +97,9 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
                 break;
             case 32:
                 matrixMulTiled<32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                break;
+            case 64:
+                matrixMulTiled<64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
