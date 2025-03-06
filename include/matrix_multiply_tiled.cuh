@@ -16,8 +16,8 @@
 // unrolls the inner loop, and uses __restrict__ qualifiers.
 #include <cuda_pipeline.h>  // May be required for __cp_async intrinsics.
 #include <cstdint>
-
-template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE, int WARP_SIZE>
+#define WARP_SIZE 32
+template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
 __global__ void matrixMulTiled(const float * __restrict__ A, const float * __restrict__ B, float * __restrict__ C, int M, int N, int K)
 {
     // Ensure TILE_SIZE is divisible by BLOCK_DIM_Y.
