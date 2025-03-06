@@ -9,76 +9,85 @@
 #include <algorithm>
 #include "utils.cuh"
 
+// Optimized Tiled Matrix Multiplication Kernel
+// TILE_SIZE is a compile-time parameter.
+// blockDim.y is flexible.
+// This version uses padding for the B tile to reduce bank conflicts,
+// unrolls the inner loop, and uses __restrict__ qualifiers.
 template <int TILE_SIZE>
-__global__ void matrixMulTiled(const float *__restrict__ A,
-                               const float *__restrict__ B,
-                               float *__restrict__ C,
-                               int M, int N, int K) {
-    // Each block computes a TILE_SIZE x TILE_SIZE sub-matrix of C.
-    // Block row offset in C.
-    int blockRow = blockIdx.y * TILE_SIZE;
-    // Global column index for C; each thread handles one column in the tile.
-    int col = blockIdx.x * TILE_SIZE + threadIdx.x;
-    
-    // Determine how many output rows in the tile this thread computes.
-    // Maximum possible is TILE_SIZE (when blockDim.y==1), but if more threads in y, then fewer rows per thread.
+__global__ void matrixMulTiledOptimized(const float *__restrict__ A,
+                                        const float *__restrict__ B,
+                                        float *__restrict__ C,
+                                        int M, int N, int K) {
+    // Block indices determine the tile of C computed by this block.
+    int bx = blockIdx.x;
+    int by = blockIdx.y;
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+
+    // The starting row and column for the tile in C.
+    int rowBlock = by * TILE_SIZE;
+    int colBlock = bx * TILE_SIZE;
+
+    // Compute how many rows in the tile each thread is responsible for.
+    // Each thread starting at threadIdx.y computes rows at stride blockDim.y.
     int numRows = (TILE_SIZE + blockDim.y - 1) / blockDim.y;
-    
-    // Allocate a local accumulation array.
-    // We allocate TILE_SIZE elements (the maximum needed) but only use the first 'numRows' entries.
+
+    // Local accumulation registers.
+    // We allocate TILE_SIZE elements (the maximum possible) but only use the first numRows.
     float accum[TILE_SIZE];
     #pragma unroll
     for (int i = 0; i < TILE_SIZE; i++) {
         accum[i] = 0.0f;
     }
-    
+
     // Shared memory tiles.
-    // For tileA, a TILE_SIZE x TILE_SIZE block.
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE];
-    // For tileB, pad by one column to reduce shared memory bank conflicts.
-    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
-    
-    // Number of tiles in the K dimension.
+    // For A, a standard tile.
+    __shared__ float As[TILE_SIZE][TILE_SIZE];
+    // For B, pad the second dimension by 1 to avoid bank conflicts.
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE + 1];
+
+    // Number of tiles required in the K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
-    
+
     for (int t = 0; t < numTiles; t++) {
-        // --- Load tileA ---
-        // Each thread loads multiple rows from A into shared memory.
-        for (int i = threadIdx.y; i < TILE_SIZE; i += blockDim.y) {
-            int row = blockRow + i;
-            int colA = t * TILE_SIZE + threadIdx.x;
-            tileA[i][threadIdx.x] = (row < M && colA < K) ? A[row * K + colA] : 0.0f;
+        // Load the A tile: each thread loads multiple rows (with stride blockDim.y).
+        for (int i = ty; i < TILE_SIZE; i += blockDim.y) {
+            int aRow = rowBlock + i;
+            int aCol = t * TILE_SIZE + tx;
+            As[i][tx] = (aRow < M && aCol < K) ? A[aRow * K + aCol] : 0.0f;
         }
-        
-        // --- Load tileB ---
-        // Each thread loads multiple rows from B into shared memory.
-        for (int i = threadIdx.y; i < TILE_SIZE; i += blockDim.y) {
-            int rowB = t * TILE_SIZE + i;
-            tileB[i][threadIdx.x] = (rowB < K && col < N) ? B[rowB * N + col] : 0.0f;
+
+        // Load the B tile: each thread loads multiple rows.
+        for (int i = ty; i < TILE_SIZE; i += blockDim.y) {
+            int bRow = t * TILE_SIZE + i;
+            int bCol = colBlock + tx;
+            Bs[i][tx] = (bRow < K && bCol < N) ? B[bRow * N + bCol] : 0.0f;
         }
-        
+
         __syncthreads();
-        
-        // --- Multiply the two tiles ---
-        // Unroll the loop over the tile dimension.
+
+        // Compute the partial products.
+        // Unroll the loop over the shared dimension.
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
-            float bVal = tileB[k][threadIdx.x];
-            // Each thread computes 'numRows' output rows.
+            float bVal = Bs[k][tx];
+            // Each thread computes its micro-tile: rows given by (ty + i * blockDim.y)
             for (int i = 0; i < numRows; i++) {
-                int rowInTile = threadIdx.y + i * blockDim.y;
+                int rowInTile = ty + i * blockDim.y;
                 if (rowInTile < TILE_SIZE) {
-                    accum[i] += tileA[rowInTile][k] * bVal;
+                    accum[i] += As[rowInTile][k] * bVal;
                 }
             }
         }
-        
+
         __syncthreads();
     }
-    
-    // --- Write results back to global memory ---
+
+    // Write the accumulated results to global memory.
     for (int i = 0; i < numRows; i++) {
-        int row = blockRow + threadIdx.y + i * blockDim.y;
+        int row = rowBlock + ty + i * blockDim.y;
+        int col = colBlock + tx;
         if (row < M && col < N) {
             C[row * N + col] = accum[i];
         }
