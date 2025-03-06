@@ -55,9 +55,11 @@ __global__ void matrixMulTiled(
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
     // Loop over tiles.
+    #pragma unroll
     for (int t = 0; t < numTiles; t++) {
         // Load A tile into shared memory.
         // Each thread loads MICRO_TILE_ROWS elements with a vertical stride of BLOCK_DIM_Y.
+        #pragma unroll
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
             int colA = t * TILE_SIZE + tx;
@@ -68,6 +70,7 @@ __global__ void matrixMulTiled(
         }
         // Load B tile into shared memory.
         // Each thread loads elements from B with a vertical stride.
+        #pragma unroll
         for (int i = ty; i < TILE_SIZE; i += BLOCK_DIM_Y) {
             int rowB = t * TILE_SIZE + i;
             int colB = colTile + tx;
