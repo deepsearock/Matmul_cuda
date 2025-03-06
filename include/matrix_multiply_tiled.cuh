@@ -94,8 +94,6 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     return result;
 }
 
-
-
 inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K, int tileSize) {
     float *d_A, *d_B, *d_C;
     float *h_A = new float[M * K];
@@ -112,17 +110,29 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Query device properties for optimal block size
     int minGridSize, blockSize;
-    cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<tileSize>, 0, 0);
-    
+
+    // Determine block size dynamically based on tile size
+    switch (tileSize) {
+        case 8:
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<8>, 0, 0);
+            break;
+        case 16:
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<16>, 0, 0);
+            break;
+        case 32:
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32>, 0, 0);
+            break;
+        default:
+            std::cerr << "Unsupported tile size" << std::endl;
+            exit(EXIT_FAILURE);
+    }
+
     int threadsPerBlock = std::min(blockSize, 1024);  // Ensure we don't exceed max threads per block
     dim3 blockDim(threadsPerBlock / tileSize, tileSize);
-    
-    // Compute grid dimensions
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
 
-    // Launch the kernel with dynamically determined block/grid size
+    // Launch kernel using runtime-determined grid and block sizes
     auto result = measurePerformance([&]() {
         switch (tileSize) {
             case 8:
