@@ -142,7 +142,19 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     }
     mse /= (M * N);
     
+    double error_threshold = 1e-5; // Define an acceptable error threshold
+int error_count = 0;
 
+for (int i = 0; i < M * N; ++i) {
+    double diff = fabs(h_C[i] - h_C_ref[i]);
+    if (diff > error_threshold) { // Consider it an error if the difference is too large
+        error_count++;
+    }
+}
+
+double error_percentage = (error_count * 100.0) / (M * N);
+
+std::cout << "Error Percentage: " << error_percentage << "%" << std::endl;
     // Print error results
     std::cout << "Mean Squared Error: " << mse << std::endl;
     std::cout << "Max Absolute Error: " << max_error << std::endl;
