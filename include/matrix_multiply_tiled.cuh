@@ -24,6 +24,11 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     // Number of tiles needed to cover K dimension
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
+    if (threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
+        printf("tileA[0][0] = %f, tileB[0][0] = %f\n", tileA[0][0], tileB[0][0]);
+    }
+    
+
     for (int tileIdx = 0; tileIdx < numTiles; ++tileIdx) {
         __syncthreads();
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
@@ -52,9 +57,10 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         for (int k = 0; k < validK; k++) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
-        if (row < 2 && col < 2) {
+        /*if (row < 2 && col < 2) {
             printf("C[%d][%d] = %f\n", row, col, sum);
-        }
+        }*/
+        
 
         __syncthreads();  // Ensure all threads finish before loading the next tile
     }
