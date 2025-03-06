@@ -17,7 +17,7 @@
 #include <cstdint>
 
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
-__global__ void matrixMulTiled(
+__global__ void matrixMulTiledAsync(
     const float *__restrict__ A,
     const float *__restrict__ B,
     float *__restrict__ C,
@@ -61,12 +61,13 @@ __global__ void matrixMulTiled(
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
             int colA = 0 * TILE_SIZE + tx;
             if (rowA < M && colA < K) {
+                // Convert the address to a 32-bit value.
                 unsigned int addrA = (unsigned int)(uintptr_t)&A[rowA * K + colA];
                 asm volatile(
                     "cp.async.cg.shared.global [%0], [%1], %2;\n"
                     :
                     : "r"(&As[pingpong][ty + i * BLOCK_DIM_Y][tx]),
-                      "r"(addrA),
+                      "l"(addrA),
                       "n"(4)
                 );
             } else {
@@ -84,7 +85,7 @@ __global__ void matrixMulTiled(
                     "cp.async.cg.shared.global [%0], [%1], %2;\n"
                     :
                     : "r"(&Bs[pingpong][ty + i * BLOCK_DIM_Y][tx]),
-                      "r"(addrB),
+                      "l"(addrB),
                       "n"(4)
                 );
             } else {
@@ -98,7 +99,7 @@ __global__ void matrixMulTiled(
     for (int t = 0; t < numTiles; t++) {
         int nextTile = t + 1;
         int nextPingpong = 1 - pingpong;
-        // Preload the next tile into the alternate buffer if available.
+        // Preload the next tile asynchronously if available.
         if (nextTile < numTiles) {
 #pragma unroll
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
@@ -110,7 +111,7 @@ __global__ void matrixMulTiled(
                         "cp.async.cg.shared.global [%0], [%1], %2;\n"
                         :
                         : "r"(&As[nextPingpong][ty + i * BLOCK_DIM_Y][tx]),
-                          "r"(addrA),
+                          "l"(addrA),
                           "n"(4)
                     );
                 } else {
@@ -127,7 +128,7 @@ __global__ void matrixMulTiled(
                         "cp.async.cg.shared.global [%0], [%1], %2;\n"
                         :
                         : "r"(&Bs[nextPingpong][ty + i * BLOCK_DIM_Y][tx]),
-                          "r"(addrB),
+                          "l"(addrB),
                           "n"(4)
                     );
                 } else {
@@ -161,6 +162,7 @@ __global__ void matrixMulTiled(
             C[rowC * N + col] = accum[i];
     }
 }
+
 
 // wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
