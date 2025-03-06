@@ -17,46 +17,42 @@
 #include <cuda_pipeline.h>  // May be required for __cp_async intrinsics.
 #include <cstdint>
 
-template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
-__global__ void matrixMulTiled(
+template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE, int WARP_SIZE>
+__global__ void matrixMulWarpTiled(
     const float * __restrict__ A,
     const float * __restrict__ B,
     float * __restrict__ C,
     int M, int N, int K)
 {
     // Ensure TILE_SIZE is divisible by BLOCK_DIM_Y.
-    const int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y;  // e.g., 64/16 = 4
-    
-    // Block indices.
+    constexpr int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y;
+    constexpr int MICRO_TILE_COLS = TILE_SIZE / BLOCK_DIM_X;
+
+    // Block and thread indices.
     int bx = blockIdx.x, by = blockIdx.y;
-    // Thread indices.
     int tx = threadIdx.x, ty = threadIdx.y;
 
-    // Compute starting coordinates for the output tile in C.
+    // Compute starting tile location.
     int rowTile = by * TILE_SIZE;
     int colTile = bx * TILE_SIZE;
-    // With blockDim.x = TILE_SIZE, each thread covers one column of the tile.
+
+    // Compute output column each thread is responsible for.
     int col = colTile + tx;
 
-    // Each thread accumulates MICRO_TILE_ROWS results in registers.
-    float accum[MICRO_TILE_ROWS];
-    for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-        accum[i] = 0.0f;
-    }
+    // Use registers for accumulation.
+    float accum[MICRO_TILE_ROWS][MICRO_TILE_COLS] = {0.0f};
 
-    // Shared memory for tiles.
-    // As: TILE_SIZE x TILE_SIZE for matrix A.
+    // Shared memory tiles.
     __shared__ float As[TILE_SIZE][TILE_SIZE];
-    // Bs: TILE_SIZE x (TILE_SIZE+1) for matrix B (padding to reduce bank conflicts).
-    __shared__ float Bs[TILE_SIZE][TILE_SIZE];
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE + 1];  // Padding to avoid bank conflicts.
 
-    // Number of tiles along the K dimension.
+    // Number of tiles in K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
-    // Loop over tiles.
+    // Iterate over tiles.
     for (int t = 0; t < numTiles; t++) {
         // Load A tile into shared memory.
-        // Each thread loads MICRO_TILE_ROWS elements with a vertical stride of BLOCK_DIM_Y.
+        #pragma unroll
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
             int colA = t * TILE_SIZE + tx;
@@ -65,8 +61,9 @@ __global__ void matrixMulTiled(
             else
                 As[ty + i * BLOCK_DIM_Y][tx] = 0.0f;
         }
-        // Load B tile into shared memory.
-        // Each thread loads elements from B with a vertical stride.
+
+        // Load B tile into shared memory (using warp-wide memory coalescing).
+        #pragma unroll
         for (int i = ty; i < TILE_SIZE; i += BLOCK_DIM_Y) {
             int rowB = t * TILE_SIZE + i;
             int colB = colTile + tx;
@@ -76,28 +73,32 @@ __global__ void matrixMulTiled(
                 Bs[i][tx] = 0.0f;
         }
 
-        __syncthreads();  // Ensure both tiles are fully loaded.
+        __syncthreads();  // Ensure both tiles are loaded.
 
-        // Compute partial products.
+        // Compute partial products using warp-level tiling.
+        #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = Bs[k][tx];
+
+            #pragma unroll
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                 int rowIndex = ty + i * BLOCK_DIM_Y;
-                // rowIndex is guaranteed to be < TILE_SIZE since TILE_SIZE / BLOCK_DIM_Y = MICRO_TILE_ROWS.
-                accum[i] += As[rowIndex][k] * bVal;
+                accum[i][0] += As[rowIndex][k] * bVal;
             }
         }
 
         __syncthreads();  // Wait before loading the next tile.
     }
 
-    // Write the computed micro‑tile back to global memory.
+    // Write the computed values back to global memory.
+    #pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         int rowC = rowTile + ty + i * BLOCK_DIM_Y;
         if (rowC < M && col < N)
-            C[rowC * N + col] = accum[i];
+            C[rowC * N + col] = accum[i][0];
     }
 }
+
 
 
 // wrapper function that measures performance and does memory management
