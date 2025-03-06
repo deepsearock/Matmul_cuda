@@ -15,11 +15,7 @@
 // This version uses padding for the B tile to reduce bank conflicts,
 // unrolls the inner loop, and uses __restrict__ qualifiers.
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
-__global__ void matrixMulTiled(
-    const float *__restrict__ A,
-    const float *__restrict__ B,
-    float *__restrict__ C,
-    int M, int N, int K)
+__global__ void matrixMulTiled(const float *__restrict__ A,const float *__restrict__ B,float *__restrict__ C,int M, int N, int K)
 {
     // For best results, assume TILE_SIZE % BLOCK_DIM_Y == 0.
     const int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y; // e.g. 32/8 = 4
