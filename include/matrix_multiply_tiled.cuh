@@ -12,12 +12,13 @@
 
 template <int TILE_SIZE>
 __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int N, int K) {
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
-    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
+    __shared__ float tileA[TILE_SIZE][TILE_SIZE];  
+    __shared__ float tileB[TILE_SIZE][TILE_SIZE];
 
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
-    double sum = 0.0;  // Use double for more precision
+
+    double sum = 0.0;  // Using double for more precision
 
     for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
         int tiledRowA = row;
@@ -25,7 +26,7 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
         int tiledColB = col;
 
-        // Load tiles correctly into shared memory
+        // Load tiles into shared memory with coalesced memory access
         if (tiledRowA < M && tiledColA < K) {
             tileA[threadIdx.y][threadIdx.x] = A[tiledRowA * K + tiledColA];
         } else {
@@ -40,7 +41,7 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
 
         __syncthreads();
 
-        // Perform matrix multiplication
+        // Perform matrix multiplication using loop unrolling
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; ++k) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
@@ -49,11 +50,12 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
         __syncthreads();
     }
 
-    // Store final result back to global memory
+    // Store final result back to global memory (convert double back to float)
     if (row < M && col < N) {
         C[row * N + col] = (float)sum;
     }
 }
+
 
 // wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
@@ -144,7 +146,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
                 break;
         }
     }, M, N, K);
-    
+
     // Copy results back to host
     cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
 
