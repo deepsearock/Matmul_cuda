@@ -172,24 +172,6 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     float *d_A, *d_B, *d_C;
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
 
-    int minGridSize, blockSize;
-
-    // Determine block size dynamically based on tile size
-    switch (tileSize) {
-        case 8:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 8>, 0, 0);
-            break;
-        case 16:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 16>, 0, 0);
-            break;
-        case 32:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 32, 32>, 0, 0);
-            break;
-        default:
-            std::cerr << "Unsupported tile size" << std::endl;
-            exit(EXIT_FAILURE);
-    }
-
     int threadsPerBlock = std::min(blockSize, 1024);  // Ensure we don't exceed max threads per block
     dim3 blockDim(32, 8);
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
@@ -231,24 +213,6 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
     cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
-
-    int minGridSize, blockSize;
-
-    // Determine block size dynamically based on tile size
-    switch (tileSize) {
-        case 8:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 8>, 0, 0);
-            break;
-        case 16:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 16>, 0, 0);
-            break;
-        case 32:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 16, 32>, 0, 0);
-            break;
-        default:
-            std::cerr << "Unsupported tile size" << std::endl;
-            exit(EXIT_FAILURE);
-    }
 
     int threadsPerBlock = std::min(blockSize, 1024);  // Ensure we don't exceed max threads per block
     dim3 blockDim(32, 32);
