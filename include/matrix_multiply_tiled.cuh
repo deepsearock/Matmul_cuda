@@ -12,28 +12,36 @@
 // Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    // Shared memory tiles with padding to avoid bank conflicts
     __shared__ float A_shared[TILE_SIZE][TILE_SIZE + 1];  // Padding to avoid bank conflicts
     __shared__ float B_shared[TILE_SIZE][TILE_SIZE + 1];
 
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
-
     float Cvalue = 0.0f;
 
     for (int tile = 0; tile < K / TILE_SIZE; tile++) {
         __syncthreads();
-        if (row < M && (tile * TILE_SIZE + threadIdx.x) < K)
-            A_shared[threadIdx.y][threadIdx.x] = A[row * K + tile * TILE_SIZE + threadIdx.x];
+        
+        int tiledIndex = tile * TILE_SIZE + threadIdx.x;
+        if (row < M && tiledIndex < K)
+            A_shared[threadIdx.y][threadIdx.x] = A[row * K + tiledIndex];
 
-        if (col < N && (tile * TILE_SIZE + threadIdx.y) < K)
-            B_shared[threadIdx.y][threadIdx.x] = B[(tile * TILE_SIZE + threadIdx.y) * N + col];
+        tiledIndex = tile * TILE_SIZE + threadIdx.y;
+        if (col < N && tiledIndex < K)
+            B_shared[threadIdx.y][threadIdx.x] = B[tiledIndex * N + col];
 
         __syncthreads();
 
+        // Use Kahan summation for better precision
+        float sum = 0.0f, c = 0.0f;
+        #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
-            Cvalue += A_shared[threadIdx.y][k] * B_shared[k][threadIdx.x];
+            float y = A_shared[threadIdx.y][k] * B_shared[k][threadIdx.x] - c;
+            float t = sum + y;
+            c = (t - sum) - y;
+            sum = t;
         }
+        Cvalue = sum;
     }
 
     if (row < M && col < N)
