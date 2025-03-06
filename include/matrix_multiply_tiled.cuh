@@ -47,9 +47,9 @@ __global__ void matrixMulTiled(
 
     // Shared memory for tiles.
     // As: TILE_SIZE x TILE_SIZE for matrix A.
-    __shared__ float As[TILE_SIZE][TILE_SIZE + 1];
+    __shared__ float As[TILE_SIZE][TILE_SIZE];
     // Bs: TILE_SIZE x (TILE_SIZE+1) for matrix B (padding to reduce bank conflicts).
-    __shared__ float Bs[TILE_SIZE][TILE_SIZE + 1];
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];
 
     // Number of tiles along the K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
