@@ -9,22 +9,26 @@
 #include "utils.cuh"
 
 template <int TILE_SIZE>
-__global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int N, int K) {
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE];  
-    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1]; // Fix: Prevent shared memory bank conflicts
+__global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
+    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
+    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
 
+    // Compute global thread coordinates
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
-    float sum = 0.0f;  // Register accumulation
+    // Register accumulation for better performance
+    float sum[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
+    // Iterate over tiles
     for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
+        // Compute tile positions
         int tiledRowA = row;
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
         int tiledColB = col;
 
-        // **Correct Coalesced Global Memory Loads**
+        // Load tiles using coalesced memory access
         if (tiledRowA < M && tiledColA < K) {
             tileA[threadIdx.y][threadIdx.x] = A[tiledRowA * K + tiledColA];
         } else {
@@ -32,72 +36,87 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
         }
 
         if (tiledRowB < K && tiledColB < N) {
-            tileB[threadIdx.x][threadIdx.y] = B[tiledRowB * N + tiledColB]; // Fix: Transposed load
+            tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + tiledColB];
         } else {
-            tileB[threadIdx.x][threadIdx.y] = 0.0f;
+            tileB[threadIdx.y][threadIdx.x] = 0.0f;
         }
 
-        __syncthreads();  // Ensure all threads finish loading shared memory
+        __syncthreads(); // Synchronize before computation
 
-        // **Optimized Matrix Multiplication**
+        // Perform matrix multiplication using loop unrolling
         #pragma unroll
-        for (int k = 0; k < TILE_SIZE; ++k) {
-            sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x]; // Ensure correct multiplication
+        for (int k = 0; k < TILE_SIZE; k += 4) {
+            sum[0] += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
+            sum[0] += tileA[threadIdx.y][k+1] * tileB[k+1][threadIdx.x];
+            sum[0] += tileA[threadIdx.y][k+2] * tileB[k+2][threadIdx.x];
+            sum[0] += tileA[threadIdx.y][k+3] * tileB[k+3][threadIdx.x];
+
+            if (threadIdx.y + 8 < TILE_SIZE) {
+                sum[1] += tileA[threadIdx.y + 8][k] * tileB[k][threadIdx.x];
+                sum[1] += tileA[threadIdx.y + 8][k+1] * tileB[k+1][threadIdx.x];
+                sum[1] += tileA[threadIdx.y + 8][k+2] * tileB[k+2][threadIdx.x];
+                sum[1] += tileA[threadIdx.y + 8][k+3] * tileB[k+3][threadIdx.x];
+            }
+
+            if (threadIdx.y + 16 < TILE_SIZE) {
+                sum[2] += tileA[threadIdx.y + 16][k] * tileB[k][threadIdx.x];
+                sum[2] += tileA[threadIdx.y + 16][k+1] * tileB[k+1][threadIdx.x];
+                sum[2] += tileA[threadIdx.y + 16][k+2] * tileB[k+2][threadIdx.x];
+                sum[2] += tileA[threadIdx.y + 16][k+3] * tileB[k+3][threadIdx.x];
+            }
+
+            if (threadIdx.y + 24 < TILE_SIZE) {
+                sum[3] += tileA[threadIdx.y + 24][k] * tileB[k][threadIdx.x];
+                sum[3] += tileA[threadIdx.y + 24][k+1] * tileB[k+1][threadIdx.x];
+                sum[3] += tileA[threadIdx.y + 24][k+2] * tileB[k+2][threadIdx.x];
+                sum[3] += tileA[threadIdx.y + 24][k+3] * tileB[k+3][threadIdx.x];
+            }
         }
 
-        __syncthreads(); // Ensure all computations complete before loading new tiles
+        __syncthreads(); // Synchronize before loading next tiles
     }
 
-    // **Store the final result to global memory**
+    // Store results back in global memory with bounds checking
     if (row < M && col < N) {
-        C[row * N + col] = sum;
+        C[row * N + col] = sum[0];
+    }
+    if ((row + 8) < M && col < N) {
+        C[(row + 8) * N + col] = sum[1];
+    }
+    if ((row + 16) < M && col < N) {
+        C[(row + 16) * N + col] = sum[2];
+    }
+    if ((row + 24) < M && col < N) {
+        C[(row + 24) * N + col] = sum[3];
     }
 }
-
 
 
 
 // wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
     float *d_A, *d_B, *d_C;
-    
-    // Allocate device memory
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
 
-    // Define grid and block sizes dynamically
-    dim3 blockSize, gridSize((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
-
-    // Choose the best block size for each tile size
-    if (tileSize == 8) {
-        blockSize = dim3(32, 8);
-    } else if (tileSize == 16) {
-        blockSize = dim3(32, 16);
-    } else if (tileSize == 32) {
-        blockSize = dim3(32, 32);
-    } else {
-        std::cerr << "Unsupported tile size" << std::endl;
-        exit(EXIT_FAILURE);
-    }
-
-    // Run kernel and measure performance
+    // launch kernel
     auto result = measurePerformance([&]() {
         switch (tileSize) {
             case 8:
-                matrixMulTiledOptimized<8><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<8><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                matrixMulTiledOptimized<16><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<16><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiledOptimized<32><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
+            default:
+                std::cerr << "Unsupported tile size" << std::endl;
+                exit(EXIT_FAILURE);
         }
     }, M, N, K);
 
-
-    // Free device memory
     freeDeviceMemory(d_A, d_B, d_C);
-
     return result;
 }
 
@@ -117,33 +136,21 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
-
-    dim3 blockSize, gridSize((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
-
-    // Choose the best block size for each tile size
-    if (tileSize == 8) {
-        blockSize = dim3(32, 8);
-    } else if (tileSize == 16) {
-        blockSize = dim3(32, 16);
-    } else if (tileSize == 32) {
-        blockSize = dim3(32, 32);
-    } else {
-        std::cerr << "Unsupported tile size" << std::endl;
-        exit(EXIT_FAILURE);
-    }
-
-     // Run kernel and measure performance
+    // Launch the kernel
     auto result = measurePerformance([&]() {
         switch (tileSize) {
             case 8:
-                matrixMulTiledOptimized<8><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<8><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                matrixMulTiledOptimized<16><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<16><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiledOptimized<32><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
+            default:
+                std::cerr << "Unsupported tile size" << std::endl;
+                exit(EXIT_FAILURE);
         }
     }, M, N, K);
 
