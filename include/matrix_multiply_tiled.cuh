@@ -95,10 +95,9 @@ __global__ void matrixMulTiled(
     }
 
     // Write the computed micro‑tile back to global memory.
-    #pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         int rowC = rowTile + ty + i * BLOCK_DIM_Y;
-        if (rowC < M)
+        if (rowC < M && col < N)
             C[rowC * N + col] = accum[i];
     }
 }
