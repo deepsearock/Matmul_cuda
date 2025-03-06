@@ -19,7 +19,7 @@ __global__ void matrixMulTiled(
     const float *__restrict__ A,
     const float *__restrict__ B,
     float *__restrict__ C,
-    int M, int N, int K) 
+    int M, int N, int K)
 {
     // Assume TILE_SIZE % BLOCK_DIM_Y == 0.
     const int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y; // e.g. 32/8 = 4
@@ -28,8 +28,8 @@ __global__ void matrixMulTiled(
     int bx = blockIdx.x;
     int by = blockIdx.y;
     // Thread indices
-    int tx = threadIdx.x;  // 0 ... BLOCK_DIM_X-1
-    int ty = threadIdx.y;  // 0 ... BLOCK_DIM_Y-1
+    int tx = threadIdx.x;  // 0 .. BLOCK_DIM_X-1   (should equal 32)
+    int ty = threadIdx.y;  // 0 .. BLOCK_DIM_Y-1   (should equal 8)
 
     // Compute the starting coordinates of the tile in C.
     int rowTile = by * TILE_SIZE;
@@ -37,71 +37,91 @@ __global__ void matrixMulTiled(
     // Global column index for output.
     int col = colTile + tx;
 
-    // Each thread will compute MICRO_TILE_ROWS output elements (a micro-tile) in its column.
+    // Each thread will compute MICRO_TILE_ROWS output elements (its micro-tile) in registers.
     float accum[MICRO_TILE_ROWS];
-    #pragma unroll
+#pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         accum[i] = 0.0f;
     }
 
-    // Shared memory tiles.
-    // For A, a TILE_SIZE x TILE_SIZE block.
-    __shared__ float As[TILE_SIZE][TILE_SIZE];
-    // For B, pad the second dimension by 1 to reduce bank conflicts.
-    __shared__ float Bs[TILE_SIZE][TILE_SIZE + 1];
+    // Declare double-buffered shared memory.
+    // For A: no padding needed.
+    __shared__ float As[2][TILE_SIZE][TILE_SIZE];
+    // For B: pad second dimension by 1 to reduce bank conflicts.
+    __shared__ float Bs[2][TILE_SIZE][TILE_SIZE + 1];
 
     // Number of tiles along the K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
+    int pingpong = 0;
 
-    for (int t = 0; t < numTiles; t++) {
-        // --- Load tile of A ---
-        // Each thread loads MICRO_TILE_ROWS elements from A.
+    // --- Preload the first tile into buffer "pingpong" ---
+    if (numTiles > 0) {
         #pragma unroll
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
-            int colA = t * TILE_SIZE + tx;
-            if (rowA < M && colA < K)
-                As[ty + i * BLOCK_DIM_Y][tx] = A[rowA * K + colA];
-            else
-                As[ty + i * BLOCK_DIM_Y][tx] = 0.0f;
+            int colA = 0 * TILE_SIZE + tx;
+            As[pingpong][ty + i * BLOCK_DIM_Y][tx] =
+                (rowA < M && colA < K) ? A[rowA * K + colA] : 0.0f;
         }
-
-        // --- Load tile of B ---
-        // Similarly, each thread loads MICRO_TILE_ROWS elements from B.
         #pragma unroll
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-            int rowB = t * TILE_SIZE + ty + i * BLOCK_DIM_Y;
+            int rowB = 0 * TILE_SIZE + ty + i * BLOCK_DIM_Y;
             int colB = colTile + tx;
-            if (rowB < K && colB < N)
-                Bs[ty + i * BLOCK_DIM_Y][tx] = B[rowB * N + colB];
-            else
-                Bs[ty + i * BLOCK_DIM_Y][tx] = 0.0f;
+            Bs[pingpong][ty + i * BLOCK_DIM_Y][tx] =
+                (rowB < K && colB < N) ? B[rowB * N + colB] : 0.0f;
         }
+    }
+    __syncthreads();
 
-        __syncthreads();
-
-        // --- Multiply the two tiles ---
-        #pragma unroll
-        for (int k = 0; k < TILE_SIZE; k++) {
-            float bVal = Bs[k][tx];
+    // --- Loop over tiles ---
+    for (int t = 0; t < numTiles; t++) {
+        int nextTile = t + 1;
+        int nextPingpong = 1 - pingpong;
+        // Preload the next tile into the alternate buffer if available.
+        if (nextTile < numTiles) {
             #pragma unroll
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-                int rowIndex = ty + i * BLOCK_DIM_Y;
-                accum[i] += As[rowIndex][k] * bVal;
+                int rowA = rowTile + ty + i * BLOCK_DIM_Y;
+                int colA = nextTile * TILE_SIZE + tx;
+                As[nextPingpong][ty + i * BLOCK_DIM_Y][tx] =
+                    (rowA < M && colA < K) ? A[rowA * K + colA] : 0.0f;
+            }
+            #pragma unroll
+            for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+                int rowB = nextTile * TILE_SIZE + ty + i * BLOCK_DIM_Y;
+                int colB = colTile + tx;
+                Bs[nextPingpong][ty + i * BLOCK_DIM_Y][tx] =
+                    (rowB < K && colB < N) ? B[rowB * N + colB] : 0.0f;
             }
         }
         __syncthreads();
+
+        // Compute partial products using the tile in the current pingpong buffer.
+        #pragma unroll
+        for (int k = 0; k < TILE_SIZE; k++) {
+            float bVal = Bs[pingpong][k][tx];
+            #pragma unroll
+            for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+                int rowIndex = ty + i * BLOCK_DIM_Y;
+                accum[i] += As[pingpong][rowIndex][k] * bVal;
+            }
+        }
+        __syncthreads();
+
+        // Switch buffers if there is another tile.
+        if (nextTile < numTiles)
+            pingpong = nextPingpong;
     }
 
     // --- Write the computed micro-tile back to global memory ---
-    #pragma unroll
+#pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         int rowC = rowTile + ty + i * BLOCK_DIM_Y;
-        if (rowC < M && col < N) {
+        if (rowC < M && col < N)
             C[rowC * N + col] = accum[i];
-        }
     }
 }
+
 
 
 
