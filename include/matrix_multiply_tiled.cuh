@@ -153,15 +153,19 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     dim3 gridDim((N + 64 - 1) / 64, (M + 64 - 1) / 64);
 
     // Launch kernel using runtime-determined grid and block sizes
+    dim3 blockDim(tileSize, 256 / tileSize);
+    dim3 gridDim((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
+
+    // Launch kernel using runtime-determined grid and block sizes
     auto result = measurePerformance([&]() {
         switch (tileSize) {
-            case 8:
-                matrixMulTiled<64, 4, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
-                break;
             case 16:
-                matrixMulTiled<64, 4, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<16, 16, 16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
+                matrixMulTiled<32, 8, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                break;
+            case 64:
                 matrixMulTiled<64, 4, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
