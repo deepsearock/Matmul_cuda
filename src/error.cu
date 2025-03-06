@@ -14,7 +14,7 @@ int main() {
     int tileSize = 32;  // Tile size for tiled matrix multiplication
 
     printGpuSpecs();
-    gpuselect(2);
+    gpuselect(4);
 
     std::cout << "==========================================" << std::endl;
     std::cout << "      MATRIX MULTIPLICATION TEST" << std::endl;
