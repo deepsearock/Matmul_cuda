@@ -15,7 +15,7 @@
 // This version uses padding for the B tile to reduce bank conflicts,
 // unrolls the inner loop, and uses __restrict__ qualifiers.
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
-__global__ void matrixMulTiledOptimized(
+__global__ void matrixMulTiled(
     const float *__restrict__ A,
     const float *__restrict__ B,
     float *__restrict__ C,
