@@ -24,73 +24,87 @@ __global__ void matrixMulTiled(
     float * __restrict__ C,
     int M, int N, int K)
 {
-    constexpr int WARP_TILE_ROWS = 4;  // Each warp computes a 4x8 tile
-    constexpr int WARP_TILE_COLS = 8;  
-    constexpr int WARPS_PER_BLOCK = (BLOCK_DIM_X * BLOCK_DIM_Y) / 32;  
+    // Warp tiling: 8x4 (each thread computes a 4x4 submatrix)
+    constexpr int WARP_SIZE = 32;
+    constexpr int WARP_ROWS = 8;  // 8 threads per warp in Y
+    constexpr int WARP_COLS = 4;  // 4 threads per warp in X
 
+    // Compute thread location
     int bx = blockIdx.x, by = blockIdx.y;
     int tx = threadIdx.x, ty = threadIdx.y;
-    int warp_id = (ty / WARP_TILE_ROWS) * (BLOCK_DIM_X / WARP_TILE_COLS) + (tx / WARP_TILE_COLS);
-    int lane_id = (ty % WARP_TILE_ROWS) * WARP_TILE_COLS + (tx % WARP_TILE_COLS);
-
+    int warp_id = ty / WARP_ROWS;
+    int lane_id = tx % WARP_COLS;
+    
+    // Compute the global output tile location
     int rowTile = by * TILE_SIZE;
     int colTile = bx * TILE_SIZE;
-    int row = rowTile + ty;
-    int col = colTile + tx;
 
-    float accum[WARP_TILE_ROWS][WARP_TILE_COLS] = {0.0f};
+    // Registers for accumulation
+    float accum[WARP_ROWS][WARP_COLS] = {0.0f};
 
+    // Shared memory for tiling
     __shared__ float As[TILE_SIZE][TILE_SIZE];
-    __shared__ float Bs[TILE_SIZE][TILE_SIZE + 1];  // Padding for avoiding bank conflicts
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];
 
+    // Number of tiles in the K dimension
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
     for (int t = 0; t < numTiles; t++) {
-        // Load A into shared memory
-        for (int i = 0; i < WARP_TILE_ROWS; i++) {
-            int rowA = rowTile + ty + i * BLOCK_DIM_Y;
+        // Load tiles from global memory into shared memory
+        #pragma unroll
+        for (int i = 0; i < WARP_ROWS; i++) {
+            int rowA = rowTile + ty + i;
             int colA = t * TILE_SIZE + tx;
             if (rowA < M && colA < K)
-                As[ty + i * BLOCK_DIM_Y][tx] = A[rowA * K + colA];
+                As[ty + i][tx] = A[rowA * K + colA];
             else
-                As[ty + i * BLOCK_DIM_Y][tx] = 0.0f;
+                As[ty + i][tx] = 0.0f;
         }
 
-        // Load B into shared memory with padding
-        for (int i = 0; i < WARP_TILE_COLS; i++) {
-            int rowB = t * TILE_SIZE + ty;
-            int colB = colTile + tx + i;
+        #pragma unroll
+        for (int i = 0; i < WARP_ROWS; i++) {
+            int rowB = t * TILE_SIZE + (warp_id * WARP_ROWS + i);
+            int colB = colTile + lane_id * WARP_COLS;
             if (rowB < K && colB < N)
-                Bs[ty][tx + i] = B[rowB * N + colB];
+                *(float4*)&Bs[rowB % TILE_SIZE][colB % TILE_SIZE] = *(float4*)&B[rowB * N + colB];
             else
-                Bs[ty][tx + i] = 0.0f;
+                *(float4*)&Bs[rowB % TILE_SIZE][colB % TILE_SIZE] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
         }
 
-        __syncthreads();
+        __syncthreads();  // Synchronize before computation
 
-        // Compute using warp-level tiling
+        // Compute the warp-tiled matrix multiplication
+        #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
-            float bVal[WARP_TILE_COLS];
-            for (int j = 0; j < WARP_TILE_COLS; j++) {
-                bVal[j] = Bs[k][tx + j];
+            float bVal[WARP_COLS];
+            #pragma unroll
+            for (int j = 0; j < WARP_COLS; j++) {
+                bVal[j] = Bs[k][lane_id * WARP_COLS + j];
             }
-            
-            for (int i = 0; i < WARP_TILE_ROWS; i++) {
-                accum[i][tx % WARP_TILE_COLS] += As[ty + i][k] * bVal[tx % WARP_TILE_COLS];
+
+            #pragma unroll
+            for (int i = 0; i < WARP_ROWS; i++) {
+                accum[i][0] += As[ty + i][k] * bVal[0];
+                accum[i][1] += As[ty + i][k] * bVal[1];
+                accum[i][2] += As[ty + i][k] * bVal[2];
+                accum[i][3] += As[ty + i][k] * bVal[3];
             }
         }
 
-        __syncthreads();
+        __syncthreads();  // Wait before loading next tile
     }
 
-    // Write back to global memory
-    for (int i = 0; i < WARP_TILE_ROWS; i++) {
-        int rowC = rowTile + ty + i * BLOCK_DIM_Y;
-        if (rowC < M && col < N) {
-            C[rowC * N + col] = accum[i][tx % WARP_TILE_COLS];
+    // Store results in global memory
+    #pragma unroll
+    for (int i = 0; i < WARP_ROWS; i++) {
+        int rowC = rowTile + ty + i;
+        int colC = colTile + lane_id * WARP_COLS;
+        if (rowC < M && colC < N) {
+            *(float4*)&C[rowC * N + colC] = make_float4(accum[i][0], accum[i][1], accum[i][2], accum[i][3]);
         }
     }
 }
+
 
 
 
