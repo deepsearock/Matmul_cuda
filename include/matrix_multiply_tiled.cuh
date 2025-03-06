@@ -49,6 +49,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         __syncthreads();
         
         // Compute partial sum
+        #pragma unroll
         for (int k = 0; k < TILE_SIZE; ++k) {
             if ((tileIdx * TILE_SIZE + k) < K) {
                 sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
@@ -100,6 +101,14 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     float *h_C = new float[M * N];
     float *h_C_ref = new float[M * N];
 
+    int minGridSize, blockSize;
+    cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<TILE_SIZE>, 0, 0);
+
+    dim3 threadsPerBlock(blockSize, blockSize);
+    dim3 gridSize((N + threadsPerBlock.x - 1) / threadsPerBlock.x, (M + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+matrixMulTiled<TILE_SIZE><<<gridSize, threadsPerBlock>>>(d_A, d_B, d_C, M, N, K);
+
     // Initialize host memory with random values
     for (int i = 0; i < M * K; ++i) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
     for (int i = 0; i < K * N; ++i) h_B[i] = static_cast<float>(rand()) / RAND_MAX;
@@ -119,7 +128,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
                 matrixMulTiled<16><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 32)>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32><<<gridSize, threadsPerBlock>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
