@@ -63,6 +63,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
 
 }
 
+namespace nvcuda::wmma
 template <int TILE_SIZE>
 __global__ void matrixMulTensorCore(half *A, half *B, float *C, int M, int N, int K) {
     // Define WMMA tile size
