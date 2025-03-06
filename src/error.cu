@@ -4,7 +4,7 @@
 #include "utils.cuh"
 #include "matrix_multiply_naive.cuh"
 #include "matrix_multiply_tiled.cuh"
-
+#include <unistd.h>
 int main() {
     // Set matrix dimensions
     int M = 1000;  // Number of rows in A and C
@@ -25,6 +25,7 @@ int main() {
     std::cout << "\nRunning Naïve GPU Matrix Multiplication..." << std::endl;
     auto naive_result = runMatrixMulNaiveWithErrorCheck(M, N, K, 8, 32);
 
+    sleep(3)
     // Run tiled matrix multiplication with error check
     std::cout << "\nRunning Tiled GPU Matrix Multiplication (Tile Size = " << tileSize << ")..." << std::endl;
     auto tiled_result = runMatrixMulTiledWithErrorCheck(M, N, K, tileSize);
