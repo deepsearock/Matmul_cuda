@@ -102,12 +102,11 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     float *h_C_ref = new float[M * N];
 
     int minGridSize, blockSize;
-    cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<TILE_SIZE>, 0, 0);
+    cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<tileSize>, 0, 0);
 
     dim3 threadsPerBlock(blockSize, blockSize);
     dim3 gridSize((N + threadsPerBlock.x - 1) / threadsPerBlock.x, (M + threadsPerBlock.y - 1) / threadsPerBlock.y);
 
-matrixMulTiled<TILE_SIZE><<<gridSize, threadsPerBlock>>>(d_A, d_B, d_C, M, N, K);
 
     // Initialize host memory with random values
     for (int i = 0; i < M * K; ++i) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
