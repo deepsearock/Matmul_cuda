@@ -10,6 +10,7 @@
 #include <cuda_fp16.h>
 #include <mma.h>
 
+
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
     __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
@@ -62,65 +63,6 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     }
 
 }
-
-namespace nvcuda::wmma
-template <int TILE_SIZE>
-__global__ void matrixMulTensorCore(half *A, half *B, float *C, int M, int N, int K) {
-    // Define WMMA tile size
-    constexpr int WMMA_M = 16;
-    constexpr int WMMA_N = 16;
-    constexpr int WMMA_K = 16;
-
-    // Compute tile position
-    int warpM = (blockIdx.y * blockDim.y + threadIdx.y) / 16;
-    int warpN = (blockIdx.x * blockDim.x + threadIdx.x) / 16;
-
-    // Shared memory for input matrices
-    __shared__ half tileA[TILE_SIZE][TILE_SIZE];
-    __shared__ half tileB[TILE_SIZE][TILE_SIZE];
-
-    // Accumulator register
-    wmma::fragment<wmma::accumulator, WMMA_M, WMMA_N, WMMA_K, float> acc;
-    wmma::fill_fragment(acc, 0.0f);
-
-    // Iterate over tiles
-    for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; tileIdx++) {
-        // Load tiles into shared memory
-        int row = warpM * TILE_SIZE + threadIdx.y;
-        int col = warpN * TILE_SIZE + threadIdx.x;
-
-        if (row < M && (tileIdx * TILE_SIZE + threadIdx.x) < K) {
-            tileA[threadIdx.y][threadIdx.x] = A[row * K + tileIdx * TILE_SIZE + threadIdx.x];
-        } else {
-            tileA[threadIdx.y][threadIdx.x] = __float2half(0.0f);
-        }
-
-        if ((tileIdx * TILE_SIZE + threadIdx.y) < K && col < N) {
-            tileB[threadIdx.y][threadIdx.x] = B[(tileIdx * TILE_SIZE + threadIdx.y) * N + col];
-        } else {
-            tileB[threadIdx.y][threadIdx.x] = __float2half(0.0f);
-        }
-
-        __syncthreads();
-
-        // Load fragments from shared memory to registers
-        wmma::fragment<wmma::matrix_a, WMMA_M, WMMA_N, WMMA_K, half, wmma::row_major> a_frag;
-        wmma::fragment<wmma::matrix_b, WMMA_M, WMMA_N, WMMA_K, half, wmma::col_major> b_frag;
-
-        wmma::load_matrix_sync(a_frag, &tileA[threadIdx.y][0], TILE_SIZE);
-        wmma::load_matrix_sync(b_frag, &tileB[0][threadIdx.x], TILE_SIZE);
-
-        // Matrix multiply and accumulate
-        wmma::mma_sync(acc, a_frag, b_frag, acc);
-        __syncthreads();
-    }
-
-    // Store result back to global memory
-    if (warpM * TILE_SIZE + threadIdx.y < M && warpN * TILE_SIZE + threadIdx.x < N) {
-        wmma::store_matrix_sync(&C[(warpM * TILE_SIZE + threadIdx.y) * N + (warpN * TILE_SIZE + threadIdx.x)], acc, TILE_SIZE, wmma::mem_row_major);
-    }
-}
-
 
 // wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int TILE_SIZE) {
