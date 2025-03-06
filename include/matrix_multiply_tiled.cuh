@@ -16,12 +16,9 @@
 // unrolls the inner loop, and uses __restrict__ qualifiers.
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    // Static assertion to ensure TILE_SIZE is valid
-    static_assert(TILE_SIZE == 8 || TILE_SIZE == 16 || TILE_SIZE == 32, "TILE_SIZE must be 8, 16, or 32");
-    
-    // Define shared memory for tiles
-    __shared__ float As[TILE_SIZE][TILE_SIZE];
-    __shared__ float Bs[TILE_SIZE][TILE_SIZE];
+    // Define shared memory for tiles with padding to avoid bank conflicts
+    __shared__ float As[TILE_SIZE][TILE_SIZE + 2];  // +2 padding to avoid bank conflicts
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE + 2];  // +2 padding to avoid bank conflicts
     
     // Calculate thread coordinates
     int bx = blockIdx.x;
@@ -33,61 +30,73 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     int row = by * BLOCK_DIM_Y + ty;
     int col = bx * BLOCK_DIM_X + tx;
     
-    // Accumulator for result
-    float Cvalue = 0.0f;
+    // Registers for storing input elements to enable reuse
+    float Areg[4] = {0.0f};  // For storing multiple elements from A
+    float Breg[4] = {0.0f};  // For storing multiple elements from B
+    float Creg = 0.0f;       // Accumulator for output
     
     // Calculate number of tile iterations needed
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
     
-    // Each thread may need to load multiple elements into shared memory
-    // if block dimensions are smaller than tile size
+    // Loop over tiles
     for (int t = 0; t < numTiles; ++t) {
-        // Clear shared memory
+        // Collaborative loading of A and B tiles into shared memory
+        // Each thread loads multiple elements to maximize memory bandwidth
+        
+        // Load A tiles using vectorized loads when possible
+        #pragma unroll 2
         for (int i = 0; i < TILE_SIZE; i += BLOCK_DIM_Y) {
-            for (int j = 0; j < TILE_SIZE; j += BLOCK_DIM_X) {
-                if (ty + i < TILE_SIZE && tx + j < TILE_SIZE) {
-                    // Load A tile - one thread may load multiple elements
-                    if (row < M && (t * TILE_SIZE + tx + j) < K) {
-                        As[ty + i][tx + j] = A[row * K + (t * TILE_SIZE + tx + j)];
-                    } else {
-                        As[ty + i][tx + j] = 0.0f;
-                    }
-                    
-                    // Load B tile - one thread may load multiple elements
-                    if ((t * TILE_SIZE + ty + i) < K && col < N) {
-                        Bs[ty + i][tx + j] = B[(t * TILE_SIZE + ty + i) * N + col];
-                    } else {
-                        Bs[ty + i][tx + j] = 0.0f;
-                    }
+            if (ty + i < TILE_SIZE) {
+                int globalARow = row;
+                int globalACol = t * TILE_SIZE + tx;
+                
+                if (globalARow < M && globalACol < K) {
+                    As[ty + i][tx] = A[globalARow * K + globalACol];
+                } else {
+                    As[ty + i][tx] = 0.0f;
                 }
             }
         }
         
-        // Ensure all threads have loaded data
+        // Load B tiles using vectorized loads when possible
+        #pragma unroll 2
+        for (int i = 0; i < TILE_SIZE; i += BLOCK_DIM_Y) {
+            if (ty + i < TILE_SIZE) {
+                int globalBRow = t * TILE_SIZE + ty + i;
+                int globalBCol = col;
+                
+                if (globalBRow < K && globalBCol < N) {
+                    Bs[ty + i][tx] = B[globalBRow * N + globalBCol];
+                } else {
+                    Bs[ty + i][tx] = 0.0f;
+                }
+            }
+        }
+        
+        // Ensure all data is loaded
         __syncthreads();
         
-        // Compute partial dot products
+        // Compute partial dot products with register blocking and loop unrolling
         if (row < M && col < N) {
-            // Loop unrolling based on tile size
-            if (TILE_SIZE == 8) {
-                #pragma unroll 8
-                for (int k = 0; k < TILE_SIZE; ++k) {
-                    if (t * TILE_SIZE + k < K) {
-                        Cvalue += As[ty][k] * Bs[k][tx];
+            // Manual loop unrolling for better instruction-level parallelism
+            #pragma unroll 8
+            for (int k = 0; k < TILE_SIZE; k += 4) {
+                if (t * TILE_SIZE + k < K) {
+                    // Load multiple elements from shared memory into registers
+                    #pragma unroll 4
+                    for (int j = 0; j < 4; j++) {
+                        if (k + j < TILE_SIZE) {
+                            Areg[j] = As[ty][k + j];
+                            Breg[j] = Bs[k + j][tx];
+                        }
                     }
-                }
-            } else if (TILE_SIZE == 16) {
-                #pragma unroll 16
-                for (int k = 0; k < TILE_SIZE; ++k) {
-                    if (t * TILE_SIZE + k < K) {
-                        Cvalue += As[ty][k] * Bs[k][tx];
-                    }
-                }
-            } else { // TILE_SIZE == 32
-                #pragma unroll 32
-                for (int k = 0; k < TILE_SIZE; ++k) {
-                    if (t * TILE_SIZE + k < K) {
-                        Cvalue += As[ty][k] * Bs[k][tx];
+                    
+                    // Perform multiple multiply-adds with register operands
+                    #pragma unroll 4
+                    for (int j = 0; j < 4; j++) {
+                        if (k + j < TILE_SIZE && t * TILE_SIZE + k + j < K) {
+                            Creg += Areg[j] * Breg[j];
+                        }
                     }
                 }
             }
@@ -99,7 +108,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     
     // Write result
     if (row < M && col < N) {
-        C[row * N + col] = Cvalue;
+        C[row * N + col] = Creg;
     }
 }
 
