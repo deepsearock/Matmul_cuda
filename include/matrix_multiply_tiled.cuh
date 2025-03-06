@@ -12,8 +12,8 @@
 // Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
-    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
+    __shared__ float tileA[TILE_SIZE][TILE_SIZE];  
+    __shared__ float tileB[TILE_SIZE][TILE_SIZE];
 
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
@@ -26,40 +26,35 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
 
-        // ✅ Fix: Ensure all threads properly load shared memory (especially for 32x8 blocks)
-        for (int i = 0; i < TILE_SIZE; i += blockDim.y) {  
-            int loadRowA = row + i;
-            int loadRowB = tiledRowB + i;
-
-            if (loadRowA < M && tiledColA < K) {
-                tileA[threadIdx.y + i][threadIdx.x] = A[loadRowA * K + tiledColA];
-            } else {
-                tileA[threadIdx.y + i][threadIdx.x] = 0.0f;
-            }
-
-            if (loadRowB < K && col < N) {
-                tileB[threadIdx.y + i][threadIdx.x] = B[loadRowB * N + col];
-            } else {
-                tileB[threadIdx.y + i][threadIdx.x] = 0.0f;
-            }
+        // ✅ Fix: Ensure each thread correctly loads data into shared memory
+        if (row < M && tiledColA < K) {
+            tileA[threadIdx.y][threadIdx.x] = A[row * K + tiledColA];
+        } else {
+            tileA[threadIdx.y][threadIdx.x] = 0.0f;
         }
 
-        __syncthreads();  // ✅ Fix: Ensure all threads finish loading shared memory
+        if (tiledRowB < K && col < N) {
+            tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + col];
+        } else {
+            tileB[threadIdx.y][threadIdx.x] = 0.0f;
+        }
 
-        // ✅ Fix: Compute only valid elements in the tile
-        int validK = min(K - tileIdx * TILE_SIZE, TILE_SIZE);
-        for (int k = 0; k < validK; k++) {
+        __syncthreads();  
+
+        // ✅ Fix: Properly compute sum from tiles
+        for (int k = 0; k < TILE_SIZE; k++) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
 
-        __syncthreads();  // ✅ Fix: Synchronize before loading the next tile
+        __syncthreads();
     }
 
-    // ✅ Fix: Ensure only valid threads write results
+    // ✅ Fix: Ensure only valid results are written
     if (row < M && col < N) {
         C[row * N + col] = sum;
     }
 }
+
 
 
 
