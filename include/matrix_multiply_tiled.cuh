@@ -8,13 +8,13 @@
 #include <cmath>
 #include <algorithm>
 #include "utils.cuh"
-#include <cstdint>
+
 // Optimized Tiled Matrix Multiplication Kernel
 // TILE_SIZE is a compile-time parameter.
 // blockDim.y is flexible.
 // This version uses padding for the B tile to reduce bank conflicts,
 // unrolls the inner loop, and uses __restrict__ qualifiers.
-
+#include <cstdint>
 
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
 __global__ void matrixMulTiledAsync(
@@ -163,6 +163,58 @@ __global__ void matrixMulTiledAsync(
 }
 
 
+
+
+
+
+// wrapper function that measures performance and does memory management
+inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
+    float *d_A, *d_B, *d_C;
+    allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
+
+    int minGridSize, blockSize;
+
+    // Determine block size dynamically based on tile size
+    switch (tileSize) {
+        case 8:
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 8>, 0, 0);
+            break;
+        case 16:
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 16>, 0, 0);
+            break;
+        case 32:
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 32, 32>, 0, 0);
+            break;
+        default:
+            std::cerr << "Unsupported tile size" << std::endl;
+            exit(EXIT_FAILURE);
+    }
+
+    int threadsPerBlock = std::min(blockSize, 1024);  // Ensure we don't exceed max threads per block
+    dim3 blockDim(32, 8);
+    dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
+
+    // Launch kernel using runtime-determined grid and block sizes
+    auto result = measurePerformance([&]() {
+        switch (tileSize) {
+            case 8:
+                matrixMulTiled<32, 8, 8><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                break;
+            case 16:
+                matrixMulTiled<32, 8, 1><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                break;
+            case 32:
+                matrixMulTiled<32, 8, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                break;
+            default:
+                std::cerr << "Unsupported tile size" << std::endl;
+                exit(EXIT_FAILURE);
+        }
+    }, M, N, K);
+
+    freeDeviceMemory(d_A, d_B, d_C);
+    return result;
+}
 
 inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K, int tileSize) {
     float *d_A, *d_B, *d_C;
