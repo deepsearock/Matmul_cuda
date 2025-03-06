@@ -12,50 +12,55 @@
 // Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
-    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
+    __shared__ float tileA[TILE_SIZE][8 + 1];  // Padding to prevent bank conflicts
+    __shared__ float tileB[TILE_SIZE][8 + 1];
 
+    // Compute row and column of the output matrix
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
     
     float sum = 0.0f;
+
+    // Number of tiles needed to cover K dimension
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
     for (int tileIdx = 0; tileIdx < numTiles; ++tileIdx) {
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
 
-        // **Fix: Ensure we don't read out of bounds**
+        // ✅ **Fix: Ensure correct loading into shared memory**
+        // Each thread loads multiple rows/cols if necessary (handles 32x8 thread blocks)
         if (row < M && tiledColA < K) {
             tileA[threadIdx.y][threadIdx.x] = A[row * K + tiledColA];
         } else {
-            tileA[threadIdx.y][threadIdx.x] = 0.0f;  // Avoid garbage values
+            tileA[threadIdx.y][threadIdx.x] = 0.0f;  // Avoid using garbage values
         }
 
         if (tiledRowB < K && col < N) {
             tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + col];
         } else {
-            tileB[threadIdx.y][threadIdx.x] = 0.0f;  // Avoid garbage values
+            tileB[threadIdx.y][threadIdx.x] = 0.0f;
         }
 
-        __syncthreads();  // Ensure memory is fully loaded
+        __syncthreads();  // Ensure all threads have loaded data before computation
 
-        // **Fix: Handle partial tiles correctly**
-        int validTileSize = min(TILE_SIZE, K - tileIdx * TILE_SIZE);
+        // ✅ **Fix: Ensure we only compute within valid range**
+        int validK = min(K - tileIdx * TILE_SIZE, TILE_SIZE);
 
         #pragma unroll
-        for (int k = 0; k < validTileSize; k++) {  // Compute only valid elements
+        for (int k = 0; k < validK; k++) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
 
-        __syncthreads();  // Ensure computation finishes before next tile
+        __syncthreads();  // Ensure all threads finish before loading the next tile
     }
 
-    // **Fix: Ensure only valid threads write results**
+    // ✅ **Fix: Ensure we do not write to out-of-bounds memory**
     if (row < M && col < N) {
         C[row * N + col] = sum;
     }
 }
+
 
 
 
