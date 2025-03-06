@@ -94,7 +94,8 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     return result;
 }
 
-inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K, int tileSize) {
+template <int TILE_SIZE>
+inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K) {
     float *d_A, *d_B, *d_C;
     float *h_A = new float[M * K];
     float *h_B = new float[K * N];
@@ -102,11 +103,21 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     float *h_C_ref = new float[M * N];
 
     int minGridSize, blockSize;
-    cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<tileSize>, 0, 0);
 
+    auto kernel = [](int M, int N, int K, float* d_A, float* d_B, float* d_C) {
+        matrixMulTiled<TILE_SIZE><<<dim3((N + TILE_SIZE - 1) / TILE_SIZE, (M + TILE_SIZE - 1) / TILE_SIZE), dim3(TILE_SIZE, TILE_SIZE)>>>(
+            d_A, d_B, d_C, M, N, K);
+    };
+
+    cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, 
+        reinterpret_cast<void(*)(float*, float*, float*, int, int, int)>(kernel), 
+        0, 0);
+
+    blockSize = std::max(blockSize, 1);
+
+    // Set optimal grid and block sizes
     dim3 threadsPerBlock(blockSize, blockSize);
-    dim3 gridSize((N + threadsPerBlock.x - 1) / threadsPerBlock.x, (M + threadsPerBlock.y - 1) / threadsPerBlock.y);
-
+    dim3 gridSize((N + TILE_SIZE - 1) / TILE_SIZE, (M + TILE_SIZE - 1) / TILE_SIZE);
 
     // Initialize host memory with random values
     for (int i = 0; i < M * K; ++i) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
@@ -119,7 +130,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
 
     // Launch the kernel
     auto result = measurePerformance([&]() {
-        switch (tileSize) {
+        switch (TILE_SIZE) {
             case 8:
                 matrixMulTiled<8><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
