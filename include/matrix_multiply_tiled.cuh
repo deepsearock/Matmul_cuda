@@ -11,54 +11,59 @@
 // Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-
-    // assign shared memory for tile a and tile b
+    
+    // Shared memory tiles
     __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
     __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
 
-    // calculate the row and column indexes
+    // Compute row and column index for the output matrix
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
-    // sum register
-    float sum = 0;
+    // Initialize accumulator
+    float sum = 0.0f;
 
-    // Iterate over all tiles required to compute C(row, col)
+    // Iterate over tiles
     for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
-        // load the a tile into memory
-        int tiledRow = row;
-        int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
-        if (tiledRow < M && tiledColA < K)
-            tileA[threadIdx.y][threadIdx.x] = A[tiledRow * K + tiledColA];
-        else
-            tileA[threadIdx.y][threadIdx.x] = 0.0f; // if the row and col are smaller than M and K respectively then it is not 0
 
-        // load the b tile into memory
+        // Compute indices for loading tiles
+        int tiledRowA = row;
+        int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
+
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
         int tiledColB = col;
+
+        // Load tiles from global memory into shared memory with boundary checks
+        if (tiledRowA < M && tiledColA < K)
+            tileA[threadIdx.y][threadIdx.x] = A[tiledRowA * K + tiledColA];
+        else
+            tileA[threadIdx.y][threadIdx.x] = 0.0f; // Prevents undefined behavior
+
         if (tiledRowB < K && tiledColB < N)
             tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + tiledColB];
         else
-            tileB[threadIdx.y][threadIdx.x] = 0.0f; // if the row and col are smaller than N and K respectively then it is not 0
+            tileB[threadIdx.y][threadIdx.x] = 0.0f;
 
-        // synchronize
+        // Synchronize to ensure tiles are loaded before computation
         __syncthreads();
 
-        // matrix multiplication
+        // Compute partial sum using only valid elements
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; ++k) {
-            sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
+            if ((tileIdx * TILE_SIZE + k) < K) // Ensures valid multiplication
+                sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
-        
-        // synchronize before loading new tiles
+
+        // Synchronize before loading new tiles
         __syncthreads();
     }
 
-    // computed value is stored in global memory
+    // Store the computed value in global memory if within bounds
     if (row < M && col < N) {
         C[row * N + col] = sum;
     }
 }
+
 
 // wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
