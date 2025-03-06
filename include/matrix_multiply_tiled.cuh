@@ -9,6 +9,7 @@
 #include <algorithm>
 #include "utils.cuh"
 #define WARP_SIZE 32
+template <int TILE_SIZE>
 // Tiled CUDA kernel for matrix multiplication using shared memory
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
     __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
@@ -93,6 +94,9 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
                 break;
             case 32:
                 matrixMulTiled<32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                break;
+            case 64:
+                matrixMulTiled<64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
