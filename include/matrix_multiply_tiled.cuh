@@ -41,12 +41,12 @@ __global__ void matrixMulTiled(
     float accum[MICRO_TILE_ROWS][MICRO_TILE_COLS] = {0.0f};
 
     __shared__ float As[TILE_SIZE][TILE_SIZE];
-    __shared__ float Bs[TILE_SIZE][TILE_SIZE + 1];
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];
 
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
     for (int t = 0; t < numTiles; t++) {
-        #pragma unroll
+
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
             int colA = t * TILE_SIZE + tx;
@@ -55,7 +55,7 @@ __global__ void matrixMulTiled(
 
         // Load B tile into shared memory using warp-wide coalescing
         float regB[MICRO_TILE_COLS];
-        #pragma unroll
+
         for (int i = 0; i < MICRO_TILE_COLS; i++) {
             int rowB = t * TILE_SIZE + ty + i * BLOCK_DIM_Y;
             int colB = colTile + lane_id;
@@ -66,10 +66,9 @@ __global__ void matrixMulTiled(
         __syncthreads();
 
         // Compute partial products with warp-level optimizations
-        #pragma unroll
+
         for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = Bs[k][lane_id];
-            #pragma unroll
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                 accum[i][0] += As[ty + i * BLOCK_DIM_Y][k] * bVal;
             }
@@ -79,7 +78,6 @@ __global__ void matrixMulTiled(
     }
 
     // Store results back to global memory efficiently
-    #pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         int rowC = rowTile + ty + i * BLOCK_DIM_Y;
         if (rowC < M && col < N) {
