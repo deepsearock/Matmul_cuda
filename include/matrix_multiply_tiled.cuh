@@ -11,7 +11,7 @@
 #include <mma.h>
 
 template <int TILE_SIZE>
-__global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int N, int K) {
+__global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
     __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
     __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
 
@@ -122,14 +122,14 @@ __global__ void matrixMulTensorCore(half *A, half *B, float *C, int M, int N, in
 
 
 // wrapper function that measures performance and does memory management
-inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int TILESIZE) {
+inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int TILE_SIZE) {
     float *d_A, *d_B, *d_C;
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
     dim3 blockSize;
     dim3 gridSize((N + TILE_SIZE - 1) / TILE_SIZE, (M + TILE_SIZE - 1) / TILE_SIZE);
     // launch kernel
     auto result = measurePerformance([&]() {
-        switch (TILESIZE) {
+        switch (TILE_SIZE) {
             case 8:
                 blockSize = dim3(8, 8);
                 matrixMulTiled<8><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
