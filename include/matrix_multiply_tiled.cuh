@@ -50,11 +50,9 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         __syncthreads();
         
         // Compute partial sum
-        
         for (int k = 0; k < TILE_SIZE; ++k) {
-            if ((tileIdx * TILE_SIZE + k) < K) {
                 sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
-            }
+            
         }
         
         // Synchronize before loading new tiles
@@ -105,7 +103,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
                 matrixMulTiled<16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<32><<<dim3((N + 15) / 16, (M + 15) / 16), dim3(16, 16)>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
@@ -165,7 +163,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
                 matrixMulTiled<16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<32><<<dim3((N + 15) / 16, (M + 15) / 16), dim3(16, 16)>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
