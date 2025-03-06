@@ -151,7 +151,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     }
 
     int threadsPerBlock = std::min(blockSize, 1024);  // Ensure we don't exceed max threads per block
-    dim3 blockDim(threadsPerBlock / tileSize, tileSize);
+    dim3 blockDim(tileSize, tileSize);
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
 
     // Launch kernel using runtime-determined grid and block sizes
