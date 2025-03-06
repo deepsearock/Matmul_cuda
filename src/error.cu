@@ -20,15 +20,16 @@ int main() {
     std::cout << "      MATRIX MULTIPLICATION TEST" << std::endl;
     std::cout << "==========================================" << std::endl;
     std::cout << "Matrix Dimensions: " << M << " x " << N << " x " << K << std::endl;
-
+    // Run tiled matrix multiplication with error check
+    std::cout << "\nRunning Tiled GPU Matrix Multiplication (Tile Size = " << tileSize << ")..." << std::endl;
+    auto tiled_result = runMatrixMulTiledWithErrorCheck(M, N, K, tileSize);
+    sleep(3);
     // Run naive matrix multiplication with error check
     std::cout << "\nRunning Naïve GPU Matrix Multiplication..." << std::endl;
     auto naive_result = runMatrixMulNaiveWithErrorCheck(M, N, K, 8, 32);
 
-    sleep(3);
-    // Run tiled matrix multiplication with error check
-    std::cout << "\nRunning Tiled GPU Matrix Multiplication (Tile Size = " << tileSize << ")..." << std::endl;
-    auto tiled_result = runMatrixMulTiledWithErrorCheck(M, N, K, tileSize);
+    
+    
 
     // Print performance results
     std::cout << "\n==========================================" << std::endl;
