@@ -13,58 +13,33 @@
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
     // Shared memory tiles with padding to avoid bank conflicts
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
-    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
-    
-    // Compute row and column index for the output matrix
+    __shared__ float A_shared[TILE_SIZE][TILE_SIZE + 1];  // Padding to avoid bank conflicts
+    __shared__ float B_shared[TILE_SIZE][TILE_SIZE + 1];
+
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
-    
-    // Initialize accumulator with high precision
-    float sum = 0.0f;
-    
-    // Calculate number of tiles needed
-    int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
-    
-    // Iterate over tiles
-    for (int tileIdx = 0; tileIdx < numTiles; ++tileIdx) {
-        // Compute indices for loading tiles
-        int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
-        int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
-        
-        // Load A tile - corrected indexing
-        if (row < M && tiledColA < K) {
-            tileA[threadIdx.y][threadIdx.x] = A[row * K + tiledColA];
-        } else {
-            tileA[threadIdx.y][threadIdx.x] = 0.0f;
-        }
-        
-        // Load B tile - corrected indexing
-        if (tiledRowB < K && col < N) {
-            tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + col];
-        } else {
-            tileB[threadIdx.y][threadIdx.x] = 0.0f;
-        }
-        
-        // Synchronize to ensure tiles are loaded before computation
+
+    float Cvalue = 0.0f;
+
+    for (int tile = 0; tile < K / TILE_SIZE; tile++) {
         __syncthreads();
-        
-        // Compute partial sum
-        for (int k = 0; k < TILE_SIZE; ++k) {
-            if ((tileIdx * TILE_SIZE + k) < K) {
-                sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
-            }
-        }
-        
-        // Synchronize before loading new tiles
+        if (row < M && (tile * TILE_SIZE + threadIdx.x) < K)
+            A_shared[threadIdx.y][threadIdx.x] = A[row * K + tile * TILE_SIZE + threadIdx.x];
+
+        if (col < N && (tile * TILE_SIZE + threadIdx.y) < K)
+            B_shared[threadIdx.y][threadIdx.x] = B[(tile * TILE_SIZE + threadIdx.y) * N + col];
+
         __syncthreads();
+
+        for (int k = 0; k < TILE_SIZE; k++) {
+            Cvalue += A_shared[threadIdx.y][k] * B_shared[k][threadIdx.x];
+        }
     }
-    
-    // Store the computed value in global memory if within bounds
-    if (row < M && col < N) {
-        C[row * N + col] = sum;
-    }
+
+    if (row < M && col < N)
+        C[row * N + col] = Cvalue;
 }
+
 
 
 // wrapper function that measures performance and does memory management
