@@ -17,26 +17,31 @@
 #include <cuda_pipeline.h>  // May be required for __cp_async intrinsics.
 #include <cstdint>
 
+__device__ inline uint32_t toGlobalAddr(const void *ptr) {
+    return (uint32_t)__cvta_generic_to_global(ptr);
+}
+
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
-__global__ void matrixMulTiled(
+__global__ void matrixMulTiledAsync(
     const float *__restrict__ A,
     const float *__restrict__ B,
     float *__restrict__ C,
     int M, int N, int K)
 {
     // Assume TILE_SIZE % BLOCK_DIM_Y == 0.
-    const int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y;  // e.g., 32/8 = 4
+    // For example, with TILE_SIZE = 32 and BLOCK_DIM_Y = 8, MICRO_TILE_ROWS becomes 4.
+    const int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y;
 
     // Block and thread indices.
     int bx = blockIdx.x, by = blockIdx.y;
     int tx = threadIdx.x, ty = threadIdx.y;
 
-    // Compute starting coordinates of the tile in C.
+    // Compute the starting coordinates of the tile in C.
     int rowTile = by * TILE_SIZE;
     int colTile = bx * TILE_SIZE;
     int col = colTile + tx;
 
-    // Each thread computes MICRO_TILE_ROWS output elements (its micro‑tile) in registers.
+    // Each thread computes MICRO_TILE_ROWS outputs (its micro‑tile) in registers.
     float accum[MICRO_TILE_ROWS];
 #pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
@@ -44,42 +49,55 @@ __global__ void matrixMulTiled(
     }
 
     // Declare double-buffered shared memory.
-    __shared__ float As[2][TILE_SIZE][TILE_SIZE];             // For A.
-    __shared__ float Bs[2][TILE_SIZE][TILE_SIZE + 1];           // For B, with padding to reduce bank conflicts.
+    // For A: no padding needed.
+    __shared__ float As[2][TILE_SIZE][TILE_SIZE];
+    // For B: pad second dimension by 1 to reduce bank conflicts.
+    __shared__ float Bs[2][TILE_SIZE][TILE_SIZE + 1];
 
+    // Number of tiles along the K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
     int pingpong = 0;
 
     // --- Preload the first tile asynchronously into buffer "pingpong" ---
     if (numTiles > 0) {
+        // Load tile of A.
 #pragma unroll
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
             int colA = 0 * TILE_SIZE + tx;
             if (rowA < M && colA < K) {
-                // Copy 4 bytes (size of float) from global to shared memory.
-                __cp_async(&As[pingpong][ty + i * BLOCK_DIM_Y][tx],
-                           &A[rowA * K + colA],
-                           4);
+                uint32_t addrA = toGlobalAddr(&A[rowA * K + colA]);
+                asm volatile(
+                    "cp.async.cg.shared.global [%0], [%1], %2;\n"
+                    :
+                    : "r"(&As[pingpong][ty + i * BLOCK_DIM_Y][tx]),
+                      "r"(addrA),
+                      "n"(4)
+                );
             } else {
                 As[pingpong][ty + i * BLOCK_DIM_Y][tx] = 0.0f;
             }
         }
+        // Load tile of B.
 #pragma unroll
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowB = 0 * TILE_SIZE + ty + i * BLOCK_DIM_Y;
             int colB = colTile + tx;
             if (rowB < K && colB < N) {
-                __cp_async(&Bs[pingpong][ty + i * BLOCK_DIM_Y][tx],
-                           &B[rowB * N + colB],
-                           4);
+                uint32_t addrB = toGlobalAddr(&B[rowB * N + colB]);
+                asm volatile(
+                    "cp.async.cg.shared.global [%0], [%1], %2;\n"
+                    :
+                    : "r"(&Bs[pingpong][ty + i * BLOCK_DIM_Y][tx]),
+                      "r"(addrB),
+                      "n"(4)
+                );
             } else {
                 Bs[pingpong][ty + i * BLOCK_DIM_Y][tx] = 0.0f;
             }
         }
     }
-    __cp_async_wait(0);  // Wait for asynchronous copies to complete.
-    __syncthreads();
+    __syncthreads();  // Wait for the first tile to be loaded.
 
     // --- Loop over all tiles ---
     for (int t = 0; t < numTiles; t++) {
@@ -92,9 +110,14 @@ __global__ void matrixMulTiled(
                 int rowA = rowTile + ty + i * BLOCK_DIM_Y;
                 int colA = nextTile * TILE_SIZE + tx;
                 if (rowA < M && colA < K) {
-                    __cp_async(&As[nextPingpong][ty + i * BLOCK_DIM_Y][tx],
-                               &A[rowA * K + colA],
-                               4);
+                    uint32_t addrA = toGlobalAddr(&A[rowA * K + colA]);
+                    asm volatile(
+                        "cp.async.cg.shared.global [%0], [%1], %2;\n"
+                        :
+                        : "r"(&As[nextPingpong][ty + i * BLOCK_DIM_Y][tx]),
+                          "r"(addrA),
+                          "n"(4)
+                    );
                 } else {
                     As[nextPingpong][ty + i * BLOCK_DIM_Y][tx] = 0.0f;
                 }
@@ -104,17 +127,21 @@ __global__ void matrixMulTiled(
                 int rowB = nextTile * TILE_SIZE + ty + i * BLOCK_DIM_Y;
                 int colB = colTile + tx;
                 if (rowB < K && colB < N) {
-                    __cp_async(&Bs[nextPingpong][ty + i * BLOCK_DIM_Y][tx],
-                               &B[rowB * N + colB],
-                               4);
+                    uint32_t addrB = toGlobalAddr(&B[rowB * N + colB]);
+                    asm volatile(
+                        "cp.async.cg.shared.global [%0], [%1], %2;\n"
+                        :
+                        : "r"(&Bs[nextPingpong][ty + i * BLOCK_DIM_Y][tx]),
+                          "r"(addrB),
+                          "n"(4)
+                    );
                 } else {
                     Bs[nextPingpong][ty + i * BLOCK_DIM_Y][tx] = 0.0f;
                 }
             }
         }
-        __cp_async_wait(0);  // Wait for asynchronous copies for this iteration.
-        __syncthreads();       // Ensure current tile is ready.
-
+        __syncthreads();  // Wait for asynchronous copies for this iteration.
+      
         // --- Compute partial products using the tile in the current pingpong buffer ---
 #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
@@ -139,6 +166,7 @@ __global__ void matrixMulTiled(
             C[rowC * N + col] = accum[i];
     }
 }
+
 
 
 

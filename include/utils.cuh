@@ -7,8 +7,15 @@
 #include <cstdlib>
 #include <functional>
 #include <random>
+#include <cstdint>
 
 #define checkCudaErrors(val) checkCuda((val), #val, __FILE__, __LINE__)
+
+__device__ inline uint32_t toGlobalAddr(const void *ptr) {
+    // Convert a generic pointer to a 32-bit global address.
+    // This works if your global memory pointers are in the low 4GB.
+    return (uint32_t)__cvta_generic_to_global(ptr);
+}
 
 // unused could do random 0.0 to 1.0
 void populateMatrix(float *matrix, int rows, int cols) {
