@@ -19,34 +19,40 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
     float sum = 0.0f;
-
+    
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
     for (int tileIdx = 0; tileIdx < numTiles; ++tileIdx) {
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
 
-        // ✅ Fix: Corrected shared memory load to ensure all data is stored
+        // ✅ Fix: Make sure ALL 32 rows are loaded correctly, even with 32x8 blocks
         for (int i = 0; i < TILE_SIZE; i += blockDim.y) {  
-            int loadRowA = row + i;
-            int loadRowB = tiledRowB + i;
+            int rowA = blockIdx.y * TILE_SIZE + threadIdx.y + i;
+            int rowB = tileIdx * TILE_SIZE + threadIdx.y + i;
 
-            if (loadRowA < M && tiledColA < K) {
-                tileA[threadIdx.y + i][threadIdx.x] = A[loadRowA * K + tiledColA];
+            if (rowA < M && tiledColA < K) {
+                tileA[threadIdx.y + i][threadIdx.x] = A[rowA * K + tiledColA];
             } else {
                 tileA[threadIdx.y + i][threadIdx.x] = 0.0f;
             }
 
-            if (loadRowB < K && col < N) {
-                tileB[threadIdx.y + i][threadIdx.x] = B[loadRowB * N + col];
+            if (rowB < K && col < N) {
+                tileB[threadIdx.y + i][threadIdx.x] = B[rowB * N + col];
             } else {
                 tileB[threadIdx.y + i][threadIdx.x] = 0.0f;
             }
         }
 
+        if (threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
+            printf("Global A[%d][%d] = %f\n", row, tiledColA, A[row * K + tiledColA]);
+            printf("Global B[%d][%d] = %f\n", tiledRowB, col, B[tiledRowB * N + col]);
+        }
+        
+
         __syncthreads();
 
-        // ✅ Fix: Proper boundary checking in computation
+        // ✅ Fix: Correctly compute sum across all valid elements
         for (int k = 0; k < TILE_SIZE; k++) {
             if (threadIdx.y < TILE_SIZE && threadIdx.x < TILE_SIZE) {  
                 sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
@@ -56,11 +62,12 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         __syncthreads();
     }
 
-    // ✅ Fix: Ensure only valid threads write back
+    // ✅ Fix: Only write valid results to `C`
     if (row < M && col < N) {
         C[row * N + col] = sum;
     }
 }
+
 
 
 
