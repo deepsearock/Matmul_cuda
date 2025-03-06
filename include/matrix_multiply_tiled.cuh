@@ -8,49 +8,62 @@
 #include <cmath>
 #include <algorithm>
 #include "utils.cuh"
-#define WARP_SIZE 32
+
 // Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  // Avoid bank conflicts
+    // Shared memory tiles with padding to avoid bank conflicts
+    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
     __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
-
+    
+    // Compute row and column index for the output matrix
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+    
+    // Initialize accumulator with high precision
     float sum = 0.0f;
-
+    
+    // Calculate number of tiles needed
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
-
+    
+    // Iterate over tiles
     for (int tileIdx = 0; tileIdx < numTiles; ++tileIdx) {
+        // Compute indices for loading tiles
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
-
-        // Load global memory into shared memory using row-stripe loading
-        for (int i = 0; i < TILE_SIZE; i += WARP_SIZE) {
-            if (row + i < M && tiledColA < K) {
-                tileA[threadIdx.y + i][threadIdx.x] = A[(row + i) * K + tiledColA];
-            } else {
-                tileA[threadIdx.y + i][threadIdx.x] = 0.0f;
-            }
-
-            if (tiledRowB + i < K && col < N) {
-                tileB[threadIdx.y + i][threadIdx.x] = B[(tiledRowB + i) * N + col];
-            } else {
-                tileB[threadIdx.y + i][threadIdx.x] = 0.0f;
-            }
+        
+        // Load A tile - corrected indexing
+        if (row < M && tiledColA < K) {
+            tileA[threadIdx.y][threadIdx.x] = A[row * K + tiledColA];
+        } else {
+            tileA[threadIdx.y][threadIdx.x] = 0.0f;
         }
-
+        
+        // Load B tile - corrected indexing
+        if (tiledRowB < K && col < N) {
+            tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + col];
+        } else {
+            tileB[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+        
+        // Synchronize to ensure tiles are loaded before computation
         __syncthreads();
-
-        // Unrolled computation loop
-        #pragma unroll
-        for (int k = 0; k < TILE_SIZE; k++) {
-            sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
+        
+        // Compute partial sum
+        for (int k = 0; k < TILE_SIZE; ++k) {
+            if ((tileIdx * TILE_SIZE + k) < K) {
+                sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
+            }
         }
+        
+        // Synchronize before loading new tiles
+        __syncthreads();
     }
-
-    if (row < M && col < N)
+    
+    // Store the computed value in global memory if within bounds
+    if (row < M && col < N) {
         C[row * N + col] = sum;
+    }
 }
 
 
@@ -138,7 +151,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     }
 
     int threadsPerBlock = std::min(blockSize, 1024);  // Ensure we don't exceed max threads per block
-    dim3 blockDim(tileSize, tileSize);
+    dim3 blockDim(threadsPerBlock / tileSize, tileSize);
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
 
     // Launch kernel using runtime-determined grid and block sizes
