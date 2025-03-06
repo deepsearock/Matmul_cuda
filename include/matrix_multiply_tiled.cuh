@@ -109,7 +109,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
 
     dim3 blockDim(32, 32);
-    dim3 gridDim((N + 2*blockDim.x - 1) / 2*blockDim.x, (M + 2*blockDim.y - 1) / 2*blockDim.y);
+    dim3 gridDim((N + 64 - 1) / 64, (M + 64 - 1) / 64);
 
     // Launch kernel using runtime-determined grid and block sizes
     auto result = measurePerformance([&]() {
