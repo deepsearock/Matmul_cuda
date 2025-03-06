@@ -12,48 +12,73 @@
 // Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE];  
+    // Each thread computes multiple (vertical) output elements.
+    // Here, each thread computes TILE_SIZE / blockDim.y outputs.
+    const int numRowsPerThread = TILE_SIZE / blockDim.y; // = 4 when blockDim.y == 8
+
+    // Compute the output column (all threads share the same col index)
+    int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+
+    // Declare shared memory tiles for A and B.
+    __shared__ float tileA[TILE_SIZE][TILE_SIZE];
     __shared__ float tileB[TILE_SIZE][TILE_SIZE];
 
-    int row = blockIdx.y * TILE_SIZE + threadIdx.y;
-    int col = blockIdx.x * TILE_SIZE + threadIdx.x;
-    
-    float sum = 0.0f;
+    // Each thread holds partial sums for its micro-tile (4 output elements)
+    float sum[numRowsPerThread] = {0.0f};
 
+    // Loop over all tiles required to cover the K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
-
     for (int tileIdx = 0; tileIdx < numTiles; ++tileIdx) {
-        int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
-        int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
-
-        // ✅ Fix: Ensure each thread correctly loads data into shared memory
-        if (row < M && tiledColA < K) {
-            tileA[threadIdx.y][threadIdx.x] = A[row * K + tiledColA];
-        } else {
-            tileA[threadIdx.y][threadIdx.x] = 0.0f;
+        // --- Load tileA ---
+        // Each thread loads multiple rows of the tile.
+        for (int i = threadIdx.y; i < TILE_SIZE; i += blockDim.y) {
+            int rowA = blockIdx.y * TILE_SIZE + i;
+            int colA = tileIdx * TILE_SIZE + threadIdx.x;
+            if (rowA < M && colA < K)
+                tileA[i][threadIdx.x] = A[rowA * K + colA];
+            else
+                tileA[i][threadIdx.x] = 0.0f;
         }
 
-        if (tiledRowB < K && col < N) {
-            tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + col];
-        } else {
-            tileB[threadIdx.y][threadIdx.x] = 0.0f;
+        // --- Load tileB ---
+        // Similarly, load multiple rows of tileB.
+        for (int i = threadIdx.y; i < TILE_SIZE; i += blockDim.y) {
+            int rowB = tileIdx * TILE_SIZE + i;
+            int colB = col;  // since threadIdx.x gives the column index within the tile
+            if (rowB < K && colB < N)
+                tileB[i][threadIdx.x] = B[rowB * N + colB];
+            else
+                tileB[i][threadIdx.x] = 0.0f;
         }
 
-        __syncthreads();  
+        __syncthreads();
 
-        // ✅ Fix: Properly compute sum from tiles
+        // --- Compute partial sums ---
+        // Each thread uses the loaded tiles to update its micro-tile results.
+        // The inner loop runs over the shared tile's width.
         for (int k = 0; k < TILE_SIZE; k++) {
-            sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
+            float bVal = tileB[k][threadIdx.x];
+            // Each thread computes 4 different output rows.
+            for (int i = 0; i < numRowsPerThread; i++) {
+                // Calculate the corresponding row within the tile.
+                int rowIndex = threadIdx.y + i * blockDim.y;
+                sum[i] += tileA[rowIndex][k] * bVal;
+            }
         }
 
         __syncthreads();
     }
 
-    // ✅ Fix: Ensure only valid results are written
-    if (row < M && col < N) {
-        C[row * N + col] = sum;
+    // --- Write results to global memory ---
+    // Each thread writes out its computed micro-tile elements.
+    for (int i = 0; i < numRowsPerThread; i++) {
+        int row = blockIdx.y * TILE_SIZE + threadIdx.y + i * blockDim.y;
+        if (row < M && col < N) {
+            C[row * N + col] = sum[i];
+        }
     }
 }
+
 
 
 
