@@ -25,7 +25,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
     for (int tileIdx = 0; tileIdx < numTiles; ++tileIdx) {
-        __syncthreads()
+        __syncthreads();
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
 
