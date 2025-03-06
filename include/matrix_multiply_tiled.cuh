@@ -136,7 +136,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     auto result = measurePerformance([&]() {
         switch (tileSize) {
             case 8:
-                matrixMulTiled<32, 16, 8><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32, 16, 16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
                 matrixMulTiled<32, 16, 16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
