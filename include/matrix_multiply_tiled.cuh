@@ -15,10 +15,7 @@
 // This version uses padding for the B tile to reduce bank conflicts,
 // unrolls the inner loop, and uses __restrict__ qualifiers.
 template <int TILE_SIZE>
-__global__ void matrixMulTiledOptimized(const float *__restrict__ A,
-                                        const float *__restrict__ B,
-                                        float *__restrict__ C,
-                                        int M, int N, int K) {
+__global__ void matrixMulTiledOptimized(const float *__restrict__ A,const float *__restrict__ B,float *__restrict__ C, int M, int N, int K) {
     // Block indices determine the tile of C computed by this block.
     int bx = blockIdx.x;
     int by = blockIdx.y;
