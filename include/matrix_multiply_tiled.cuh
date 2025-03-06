@@ -12,40 +12,34 @@
 // Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    __shared__ float A_shared[TILE_SIZE][TILE_SIZE + 1];  // Padding to avoid bank conflicts
-    __shared__ float B_shared[TILE_SIZE][TILE_SIZE + 1];
+    __shared__ float A_shared[16][16 + 1];
+    __shared__ float B_shared[16][16 + 1];
 
-    int row = blockIdx.y * TILE_SIZE + threadIdx.y;
-    int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+    int row = blockIdx.y * 16 + threadIdx.y;
+    int col = blockIdx.x * 16 + threadIdx.x;
     float Cvalue = 0.0f;
 
-    for (int tile = 0; tile < (K + TILE_SIZE - 1) / TILE_SIZE; tile++) {
-        __syncthreads();
+    for (int tile = 0; tile < (K + 15) / 16; tile++) {
+        // Load data into shared memory using warp striping
+        for (int i = 0; i < 16; i += WARP_SIZE) {
+            if (row + i < M && tile * 16 + threadIdx.x < K)
+                A_shared[threadIdx.y + i][threadIdx.x] = A[(row + i) * K + tile * 16 + threadIdx.x];
 
-        // Ensure all values are initialized to prevent uninitialized memory reads
-        A_shared[threadIdx.y][threadIdx.x] = 0.0f;
-        B_shared[threadIdx.y][threadIdx.x] = 0.0f;
-
-        int tiledIndex = tile * TILE_SIZE + threadIdx.x;
-        if (row < M && tiledIndex < K)
-            A_shared[threadIdx.y][threadIdx.x] = A[row * K + tiledIndex];
-
-        tiledIndex = tile * TILE_SIZE + threadIdx.y;
-        if (col < N && tiledIndex < K)
-            B_shared[threadIdx.y][threadIdx.x] = B[tiledIndex * N + col];
+            if (col + i < N && tile * 16 + threadIdx.y < K)
+                B_shared[threadIdx.y + i][threadIdx.x] = B[(tile * 16 + threadIdx.y + i) * N + col];
+        }
 
         __syncthreads();
 
-        for (int k = 0; k < TILE_SIZE; k++) {
+        for (int k = 0; k < 16; k++) {
             Cvalue += A_shared[threadIdx.y][k] * B_shared[k][threadIdx.x];
         }
+
+        __syncthreads();
     }
 
-    if (row < M && col < N) {
-        if (isnan(Cvalue) || isinf(Cvalue))  
-            printf("Invalid value at (%d, %d): %f\n", row, col, Cvalue);
+    if (row < M && col < N)
         C[row * N + col] = Cvalue;
-    }
 }
 
 
@@ -71,6 +65,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
             std::cerr << "Unsupported tile size" << std::endl;
             exit(EXIT_FAILURE);
     }
+    cudaFuncSetCacheConfig(matrixMulTiled, cudaFuncCachePreferShared);
 
     int threadsPerBlock = std::min(blockSize, 1024);  // Ensure we don't exceed max threads per block
     dim3 blockDim(tileSize, tileSize);
@@ -115,6 +110,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
     int minGridSize, blockSize;
+    cudaFuncSetCacheConfig(matrixMulTiled, cudaFuncCachePreferShared);
 
     // Determine block size dynamically based on tile size
     switch (tileSize) {
