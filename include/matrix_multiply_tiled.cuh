@@ -17,25 +17,27 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
 
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
-    
-    float sum = 0.0f;
 
+    float sum = 0.0f;
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
     for (int tileIdx = 0; tileIdx < numTiles; ++tileIdx) {
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
 
-        // ✅ Fix: Ensure all threads load necessary values, even with 32x8 blocks
-        for (int i = 0; i < TILE_SIZE; i += blockDim.y) {
-            if (row + i < M && tiledColA < K) {
-                tileA[threadIdx.y + i][threadIdx.x] = A[(row + i) * K + tiledColA];
+        // ✅ Fix: Load multiple rows using a loop to fully populate shared memory
+        for (int i = 0; i < TILE_SIZE; i += blockDim.y) {  
+            int rowA = row + i;
+            int rowB = tiledRowB + i;
+
+            if (rowA < M && tiledColA < K) {
+                tileA[threadIdx.y + i][threadIdx.x] = A[rowA * K + tiledColA];
             } else {
                 tileA[threadIdx.y + i][threadIdx.x] = 0.0f;
             }
 
-            if (tiledRowB + i < K && col < N) {
-                tileB[threadIdx.y + i][threadIdx.x] = B[(tiledRowB + i) * N + col];
+            if (rowB < K && col < N) {
+                tileB[threadIdx.y + i][threadIdx.x] = B[rowB * N + col];
             } else {
                 tileB[threadIdx.y + i][threadIdx.x] = 0.0f;
             }
@@ -43,8 +45,11 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
 
         __syncthreads();
 
+        // ✅ Fix: Ensure only valid threads compute multiplication
+        int validK = min(K - tileIdx * TILE_SIZE, TILE_SIZE);
+
         #pragma unroll
-        for (int k = 0; k < TILE_SIZE; k++) {
+        for (int k = 0; k < validK; k++) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
 
@@ -55,6 +60,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         C[row * N + col] = sum;
     }
 }
+
 
 
 
