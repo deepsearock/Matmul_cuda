@@ -17,34 +17,39 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
 
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
-    float sum = 0.0f;
 
+    float sum = 0.0f;
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
     for (int tileIdx = 0; tileIdx < numTiles; ++tileIdx) {
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
 
-        if (row < M && tiledColA < K) {
-            tileA[threadIdx.y][threadIdx.x] = A[row * K + tiledColA];
-        } else {
-            tileA[threadIdx.y][threadIdx.x] = 0.0f;
+        // Adjusted shared memory loading: Each thread loads multiple rows
+        for (int i = 0; i < TILE_SIZE; i += blockDim.y) {  // blockDim.y = 8
+            int rowA = row + i;
+            if (rowA < M && tiledColA < K) {
+                tileA[threadIdx.y + i][threadIdx.x] = A[rowA * K + tiledColA];
+            } else {
+                tileA[threadIdx.y + i][threadIdx.x] = 0.0f;
+            }
+
+            int rowB = tiledRowB + i;
+            if (rowB < K && col < N) {
+                tileB[threadIdx.y + i][threadIdx.x] = B[rowB * N + col];
+            } else {
+                tileB[threadIdx.y + i][threadIdx.x] = 0.0f;
+            }
         }
 
-        if (tiledRowB < K && col < N) {
-            tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + col];
-        } else {
-            tileB[threadIdx.y][threadIdx.x] = 0.0f;
-        }
-
-        __syncthreads();  // Ensure memory is loaded before computing
+        __syncthreads();
 
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
 
-        __syncthreads();  // Ensure computation finishes before next tile loads
+        __syncthreads();
     }
 
     if (row < M && col < N) {
