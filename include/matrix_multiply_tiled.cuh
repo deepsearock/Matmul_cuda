@@ -8,17 +8,15 @@
 #include <cmath>
 #include "utils.cuh"
 
-
-
 template <int TILE_SIZE>
 __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int N, int K) {
     __shared__ float tileA[TILE_SIZE][TILE_SIZE];  
-    __shared__ float tileB[TILE_SIZE][TILE_SIZE];
+    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1]; // Fix: Avoid shared memory bank conflicts
 
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
-    double sum = 0.0;  // Using double for more precision
+    float sum = 0.0f; // Keep accumulation in float for consistency
 
     for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
         int tiledRowA = row;
@@ -26,7 +24,7 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
         int tiledColB = col;
 
-        // Load tiles into shared memory with coalesced memory access
+        // **Coalesced Global Memory Loads**
         if (tiledRowA < M && tiledColA < K) {
             tileA[threadIdx.y][threadIdx.x] = A[tiledRowA * K + tiledColA];
         } else {
@@ -34,25 +32,25 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
         }
 
         if (tiledRowB < K && tiledColB < N) {
-            tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + tiledColB];
+            tileB[threadIdx.x][threadIdx.y] = B[tiledRowB * N + tiledColB]; // Fix: Use transposed access for coalescing
         } else {
-            tileB[threadIdx.y][threadIdx.x] = 0.0f;
+            tileB[threadIdx.x][threadIdx.y] = 0.0f;
         }
 
-        __syncthreads();
+        __syncthreads(); // Fix: Ensure shared memory is fully populated before using
 
-        // Perform matrix multiplication using loop unrolling
+        // **Optimized Matrix Multiplication**
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; ++k) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
 
-        __syncthreads();
+        __syncthreads(); // Fix: Ensure all computations are done before next tile loads
     }
 
-    // Store final result back to global memory (convert double back to float)
+    // **Store final result to global memory**
     if (row < M && col < N) {
-        C[row * N + col] = (float)sum;
+        C[row * N + col] = sum;  // Fix: Keep in `float`
     }
 }
 
