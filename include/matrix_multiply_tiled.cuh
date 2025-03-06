@@ -21,7 +21,7 @@
 // E.g., if TILE_SIZE=64, you might launch with blockDim(16, 16)
 // so that 16 * 4 = 64 columns are covered by each block in x.
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
-__global__ void matrixMulTiledVectorized(
+__global__ void matrixMulTiled(
     const float *__restrict__ A,
     const float *__restrict__ B,
     float *__restrict__ C,
