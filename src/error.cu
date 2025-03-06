@@ -22,7 +22,7 @@ int main() {
     std::cout << "Matrix Dimensions: " << M << " x " << N << " x " << K << std::endl;
     // Run tiled matrix multiplication with error check
     std::cout << "\nRunning Tiled GPU Matrix Multiplication (Tile Size = " << tileSize << ")..." << std::endl;
-    auto tiled_result = runMatrixMulTiledWithErrorCheck<tileSize>(M, N, K);
+    std::pair<double, double> tiled_result = runMatrixMulTiledWithErrorCheck(M, N, K, tileSize);
     sleep(3);
     // Run naive matrix multiplication with error check
     std::cout << "\nRunning Naïve GPU Matrix Multiplication..." << std::endl;
