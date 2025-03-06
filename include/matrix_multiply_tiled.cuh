@@ -40,7 +40,7 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
 
     // Shared memory tiles.
     __shared__ float As[TILE_SIZE][TILE_SIZE];
-    __shared__ float Bs[TILE_SIZE][TILE_SIZE + 1];  // Padding to avoid bank conflicts.
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];  // Padding to avoid bank conflicts.
 
     // Number of tiles in K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
@@ -48,7 +48,7 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
     // Iterate over tiles.
     for (int t = 0; t < numTiles; t++) {
         // Load A tile into shared memory.
-        #pragma unroll
+
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
             int colA = t * TILE_SIZE + tx;
@@ -59,7 +59,7 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
         }
 
         // Load B tile into shared memory (using warp-wide memory coalescing).
-        #pragma unroll
+
         for (int i = ty; i < TILE_SIZE; i += BLOCK_DIM_Y) {
             int rowB = t * TILE_SIZE + i;
             int colB = colTile + tx;
@@ -68,15 +68,12 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
             else
                 Bs[i][tx] = 0.0f;
         }
-
         __syncthreads();  // Ensure both tiles are loaded.
-
         // Compute partial products using warp-level tiling.
-        #pragma unroll
+
         for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = Bs[k][tx];
 
-            #pragma unroll
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                 int rowIndex = ty + i * BLOCK_DIM_Y;
                 accum[i][0] += As[rowIndex][k] * bVal;
@@ -87,7 +84,6 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
     }
 
     // Write the computed values back to global memory.
-    #pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         int rowC = rowTile + ty + i * BLOCK_DIM_Y;
         if (rowC < M && col < N)
