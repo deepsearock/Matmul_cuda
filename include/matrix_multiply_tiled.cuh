@@ -8,7 +8,7 @@
 #include <cmath>
 #include <algorithm>
 #include "utils.cuh"
-define WARP_SIZE 32
+#define WARP_SIZE 32
 // Tiled CUDA kernel for matrix multiplication using shared memory
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
     __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
