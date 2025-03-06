@@ -59,10 +59,10 @@ __global__ void matrixMulTiled(
                 // Issue asynchronous copy for A into shared memory.
                 asm volatile(
                     "cp.async.cg.shared.global [%0], [%1], %2;\n"
-                    : // no outputs; we assume the instruction initiates the copy
+                    :
                     : "r"(&As[pingpong][ty + i * BLOCK_DIM_Y][tx]),
-                      "l"(&A[rowA * K + colA]),
-                      "n"(4)   // copy 4 bytes (sizeof(float))
+                      "r"((unsigned int)(uintptr_t)&A[rowA * K + colA]),
+                      "n"(4)
                 );
             } else {
                 As[pingpong][ty + i * BLOCK_DIM_Y][tx] = 0.0f;
@@ -74,9 +74,9 @@ __global__ void matrixMulTiled(
             if (rowB < K && colB < N) {
                 asm volatile(
                     "cp.async.cg.shared.global [%0], [%1], %2;\n"
-                    : 
-                    : "r"(&Bs[pingpong][ty + i * BLOCK_DIM_Y][tx]),
-                      "l"(&B[rowB * N + colB]),
+                    :
+                    : "r"(&As[pingpong][ty + i * BLOCK_DIM_Y][tx]),
+                      "r"((unsigned int)(uintptr_t)&A[rowA * K + colA]),
                       "n"(4)
                 );
             } else {
@@ -98,9 +98,9 @@ __global__ void matrixMulTiled(
                 if (rowA < M && colA < K) {
                     asm volatile(
                         "cp.async.cg.shared.global [%0], [%1], %2;\n"
-                        : 
-                        : "r"(&As[nextPingpong][ty + i * BLOCK_DIM_Y][tx]),
-                          "l"(&A[rowA * K + colA]),
+                        :
+                        : "r"(&As[pingpong][ty + i * BLOCK_DIM_Y][tx]),
+                          "r"((unsigned int)(uintptr_t)&A[rowA * K + colA]),
                           "n"(4)
                     );
                 } else {
@@ -113,9 +113,9 @@ __global__ void matrixMulTiled(
                 if (rowB < K && colB < N) {
                     asm volatile(
                         "cp.async.cg.shared.global [%0], [%1], %2;\n"
-                        : 
-                        : "r"(&Bs[nextPingpong][ty + i * BLOCK_DIM_Y][tx]),
-                          "l"(&B[rowB * N + colB]),
+                        :
+                        : "r"(&As[pingpong][ty + i * BLOCK_DIM_Y][tx]),
+                          "r"((unsigned int)(uintptr_t)&A[rowA * K + colA]),
                           "n"(4)
                     );
                 } else {
