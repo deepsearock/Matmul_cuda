@@ -129,7 +129,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     }
 
     int threadsPerBlock = std::min(blockSize, 1024);  // Ensure we don't exceed max threads per block
-    dim3 blockDim(32, 8);
+    dim3 blockDim(32, 16);
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
 
     // Launch kernel using runtime-determined grid and block sizes
@@ -181,7 +181,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
             cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 16>, 0, 0);
             break;
         case 32:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 32>, 0, 0);
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 16, 32>, 0, 0);
             break;
         default:
             std::cerr << "Unsupported tile size" << std::endl;
@@ -189,7 +189,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     }
 
     int threadsPerBlock = std::min(blockSize, 1024);  // Ensure we don't exceed max threads per block
-    dim3 blockDim(32, 8);
+    dim3 blockDim(32, 16);
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
 
     // Launch kernel using runtime-determined grid and block sizes
@@ -202,7 +202,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
                 matrixMulTiled<32, 8, 16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<32, 8, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32, 16, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
