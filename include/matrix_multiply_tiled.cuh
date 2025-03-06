@@ -114,13 +114,13 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     // Determine block size dynamically based on tile size
     switch (tileSize) {
         case 8:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<8>, 0, 0);
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 8>, 0, 0);
             break;
         case 16:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<16>, 0, 0);
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 16>, 0, 0);
             break;
         case 32:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32>, 0, 0);
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 32>, 0, 0);
             break;
         default:
             std::cerr << "Unsupported tile size" << std::endl;
@@ -174,13 +174,13 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     // Determine block size dynamically based on tile size
     switch (tileSize) {
         case 8:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<8>, 0, 0);
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 8>, 0, 0);
             break;
         case 16:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<16>, 0, 0);
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 16>, 0, 0);
             break;
         case 32:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32>, 0, 0);
+            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32, 8, 32>, 0, 0);
             break;
         default:
             std::cerr << "Unsupported tile size" << std::endl;
