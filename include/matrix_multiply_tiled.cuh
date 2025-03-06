@@ -19,9 +19,13 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
     float Cvalue = 0.0f;
 
-    for (int tile = 0; tile < K / TILE_SIZE; tile++) {
+    for (int tile = 0; tile < (K + TILE_SIZE - 1) / TILE_SIZE; tile++) {
         __syncthreads();
-        
+
+        // Ensure all values are initialized to prevent uninitialized memory reads
+        A_shared[threadIdx.y][threadIdx.x] = 0.0f;
+        B_shared[threadIdx.y][threadIdx.x] = 0.0f;
+
         int tiledIndex = tile * TILE_SIZE + threadIdx.x;
         if (row < M && tiledIndex < K)
             A_shared[threadIdx.y][threadIdx.x] = A[row * K + tiledIndex];
@@ -32,22 +36,17 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
 
         __syncthreads();
 
-        // Use Kahan summation for better precision
-        float sum = 0.0f, c = 0.0f;
-        #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
-            float y = A_shared[threadIdx.y][k] * B_shared[k][threadIdx.x] - c;
-            float t = sum + y;
-            c = (t - sum) - y;
-            sum = t;
+            Cvalue += A_shared[threadIdx.y][k] * B_shared[k][threadIdx.x];
         }
-        Cvalue = sum;
     }
 
-    if (row < M && col < N)
+    if (row < M && col < N) {
+        if (isnan(Cvalue) || isinf(Cvalue))  
+            printf("Invalid value at (%d, %d): %f\n", row, col, Cvalue);
         C[row * N + col] = Cvalue;
+    }
 }
-
 
 
 // wrapper function that measures performance and does memory management
