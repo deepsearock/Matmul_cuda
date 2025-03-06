@@ -56,48 +56,52 @@ __global__ void matrixMulTiled(
 
     // Loop over tiles.
     for (int t = 0; t < numTiles; t++) {
-        // Load A tile into shared memory.
-        // Each thread loads MICRO_TILE_ROWS elements with a vertical stride of BLOCK_DIM_Y.
-        for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-            int rowA = rowTile + ty + i * BLOCK_DIM_Y;
+        // Load A tile into shared memory
+        #pragma unroll
+        for (int i = 0; i < MICRO_TILE_ROWS; i += 2) { // Load two rows per iteration
+            int rowA0 = rowTile + ty + i * BLOCK_DIM_Y;
+            int rowA1 = rowA0 + BLOCK_DIM_Y; // Next row
             int colA = t * TILE_SIZE + tx;
-            if (rowA < M && colA < K)
-                As[ty + i * BLOCK_DIM_Y][tx] = A[rowA * K + colA];
-            else
-                As[ty + i * BLOCK_DIM_Y][tx] = 0.0f;
+    
+            // Ensure row indices are within bounds before loading
+            As[ty + i * BLOCK_DIM_Y][tx] = (rowA0 < M && colA < K) ? A[rowA0 * K + colA] : 0.0f;
+            if (rowA1 < M) {
+                As[ty + (i+1) * BLOCK_DIM_Y][tx] = (colA < K) ? A[rowA1 * K + colA] : 0.0f;
+            }
         }
-        // Load B tile into shared memory.
-        // Each thread loads elements from B with a vertical stride.
+    
+        // Load B tile into shared memory (vectorized load)
+        #pragma unroll
         for (int i = ty; i < TILE_SIZE; i += BLOCK_DIM_Y) {
             int rowB = t * TILE_SIZE + i;
             int colB = colTile + tx;
-            if (rowB < K && colB < N)
-                Bs[i][tx] = B[rowB * N + colB];
-            else
-                Bs[i][tx] = 0.0f;
+            Bs[i][tx] = (rowB < K && colB < N) ? B[rowB * N + colB] : 0.0f;
         }
-
-        __syncthreads();  // Ensure both tiles are fully loaded.
-
-        // Compute partial products.
+    
+        __syncthreads(); // Ensure shared memory is fully loaded
+    
+        // Compute partial products using loop unrolling and register blocking
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = Bs[k][tx]; // Load once into register
-
+    
             #pragma unroll
-            for (int i = 0; i < MICRO_TILE_ROWS; i += 2) { // Process two rows per iteration
+            for (int i = 0; i < MICRO_TILE_ROWS; i += 4) { // Unroll to process 4 rows at a time
                 int rowIndex0 = ty + i * BLOCK_DIM_Y;
-                int rowIndex1 = rowIndex0 + BLOCK_DIM_Y; // Next row in the micro-tile
-
-                // Ensure rowIndex1 is within TILE_SIZE
-                if (rowIndex1 < TILE_SIZE) {
-                    accum[i]   += As[rowIndex0][k] * bVal;
-                    accum[i+1] += As[rowIndex1][k] * bVal;
-                } else {
-                    accum[i] += As[rowIndex0][k] * bVal;
-                }
+                int rowIndex1 = rowIndex0 + BLOCK_DIM_Y;
+                int rowIndex2 = rowIndex1 + BLOCK_DIM_Y;
+                int rowIndex3 = rowIndex2 + BLOCK_DIM_Y;
+    
+                accum[i]   += As[rowIndex0][k] * bVal;
+                if (rowIndex1 < TILE_SIZE) accum[i+1] += As[rowIndex1][k] * bVal;
+                if (rowIndex2 < TILE_SIZE) accum[i+2] += As[rowIndex2][k] * bVal;
+                if (rowIndex3 < TILE_SIZE) accum[i+3] += As[rowIndex3][k] * bVal;
             }
         }
+    
+        __syncthreads(); // Synchronize before next tile load
+    }
+    
 
 
         __syncthreads();  // Wait before loading the next tile.
