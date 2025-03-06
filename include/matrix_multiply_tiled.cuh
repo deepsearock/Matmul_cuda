@@ -108,8 +108,8 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     float *d_A, *d_B, *d_C;
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
 
-    dim3 blockDim(32, 16);
-    dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
+    dim3 blockDim(32, 32);
+    dim3 gridDim((N + 2*blockDim.x - 1) / 2*blockDim.x, (M + 2*blockDim.y - 1) / 2*blockDim.y);
 
     // Launch kernel using runtime-determined grid and block sizes
     auto result = measurePerformance([&]() {
@@ -121,7 +121,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
                 matrixMulTiled<128, 8, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<32, 32, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32, 32, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
