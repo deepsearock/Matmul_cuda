@@ -1,0 +1,10 @@
+build/CMakeCache.txt
+build/.cmake/api/v1/query/client-vscode/query.json
+build/CMakeFiles/cmake.check_cache
+build/CMakeFiles/CMakeConfigureLog.yaml
+build/CMakeFiles/3.30.5-msvc23/CMakeSystem.cmake
+build/CMakeFiles/3.30.5-msvc23/VCTargetsPath.txt
+build/CMakeFiles/3.30.5-msvc23/VCTargetsPath.vcxproj
+build/CMakeFiles/3.30.5-msvc23/CompilerIdCUDA/CMakeCUDACompilerId.cu
+build/CMakeFiles/3.30.5-msvc23/VCTargetsPath/x64/Debug/VCTargetsPath.recipe
+build/CMakeFiles/3.30.5-msvc23/VCTargetsPath/x64/Debug/VCTargetsPath.tlog/VCTargetsPath.lastbuildstate
