@@ -25,7 +25,7 @@ int main() {
     std::cout << "\nRunning Naïve GPU Matrix Multiplication..." << std::endl;
     auto naive_result = runMatrixMulNaiveWithErrorCheck(M, N, K, 8, 32);
 
-    sleep(3)
+    sleep(3);
     // Run tiled matrix multiplication with error check
     std::cout << "\nRunning Tiled GPU Matrix Multiplication (Tile Size = " << tileSize << ")..." << std::endl;
     auto tiled_result = runMatrixMulTiledWithErrorCheck(M, N, K, tileSize);
