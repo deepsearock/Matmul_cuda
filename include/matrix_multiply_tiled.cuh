@@ -25,10 +25,10 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
 
-        // ✅ Fix: Load multiple rows using a loop to fully populate shared memory
+        // ✅ Fix: Each thread loads multiple rows into shared memory (for 32x8 blocks)
         for (int i = 0; i < TILE_SIZE; i += blockDim.y) {  
-            int rowA = row + i;
-            int rowB = tiledRowB + i;
+            int rowA = blockIdx.y * TILE_SIZE + threadIdx.y + i;
+            int rowB = tileIdx * TILE_SIZE + threadIdx.y + i;
 
             if (rowA < M && tiledColA < K) {
                 tileA[threadIdx.y + i][threadIdx.x] = A[rowA * K + tiledColA];
@@ -45,11 +45,9 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
 
         __syncthreads();
 
-        // ✅ Fix: Ensure only valid threads compute multiplication
-        int validK = min(K - tileIdx * TILE_SIZE, TILE_SIZE);
-
+        // ✅ Compute only valid tile region
         #pragma unroll
-        for (int k = 0; k < validK; k++) {
+        for (int k = 0; k < TILE_SIZE; k++) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
 
@@ -60,6 +58,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         C[row * N + col] = sum;
     }
 }
+
 
 
 
