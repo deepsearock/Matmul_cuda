@@ -7,9 +7,9 @@
 #include <unistd.h>
 int main() {
     // Set matrix dimensions
-    int M = 2;  // Number of rows in A and C
-    int N = 2;  // Number of columns in B and C
-    int K = 2;  // Number of columns in A and rows in B
+    int M = 1564;  // Number of rows in A and C
+    int N = 1567;  // Number of columns in B and C
+    int K = 234;  // Number of columns in A and rows in B
 
     int tileSize = 32;  // Tile size for tiled matrix multiplication
 
