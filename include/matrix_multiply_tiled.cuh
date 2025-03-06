@@ -17,7 +17,7 @@
 #include <cstdint>
 
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
-__global__ void matrixMulTiledAsync(
+__global__ void matrixMulTiled(
     const float *__restrict__ A,
     const float *__restrict__ B,
     float *__restrict__ C,
@@ -162,17 +162,11 @@ __global__ void matrixMulTiledAsync(
     }
 }
 
-
-
-
-
-
 // wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
     float *d_A, *d_B, *d_C;
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
 
-    int threadsPerBlock = std::min(blockSize, 1024);  // Ensure we don't exceed max threads per block
     dim3 blockDim(32, 8);
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
 
@@ -214,7 +208,6 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
-    int threadsPerBlock = std::min(blockSize, 1024);  // Ensure we don't exceed max threads per block
     dim3 blockDim(32, 32);
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
 
