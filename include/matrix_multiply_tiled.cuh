@@ -12,35 +12,33 @@
 // Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    __shared__ float A_shared[16][16 + 1];
-    __shared__ float B_shared[16][16 + 1];
+    // Shared memory tiles with padding to avoid bank conflicts
+     __shared__ float A_shared[TILE_SIZE][TILE_SIZE + 1];  // Padding to avoid bank conflicts
+    __shared__ float B_shared[TILE_SIZE][TILE_SIZE + 1];
 
+    int row = blockIdx.y * TILE_SIZE + threadIdx.y;
+    int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
-    int row = blockIdx.y * 16 + threadIdx.y;
-    int col = blockIdx.x * 16 + threadIdx.x;
     float Cvalue = 0.0f;
 
-    for (int tile = 0; tile < (K + 15) / 16; tile++) {
-        // Load data into shared memory using warp striping
-        for (int i = 0; i < 16; i += 32) {
-            if (row + i < M && tile * 16 + threadIdx.x < K)
-                A_shared[threadIdx.y + i][threadIdx.x] = A[(row + i) * K + tile * 16 + threadIdx.x];
+    for (int tile = 0; tile < K / TILE_SIZE; tile++) {
+        __syncthreads();
+        if (row < M && (tile * TILE_SIZE + threadIdx.x) < K)
+            A_shared[threadIdx.y][threadIdx.x] = A[row * K + tile * TILE_SIZE + threadIdx.x];
 
-            if (col + i < N && tile * 16 + threadIdx.y < K)
-                B_shared[threadIdx.y + i][threadIdx.x] = B[(tile * 16 + threadIdx.y + i) * N + col];
-        }
+        if (col < N && (tile * TILE_SIZE + threadIdx.y) < K)
+            B_shared[threadIdx.y][threadIdx.x] = B[(tile * TILE_SIZE + threadIdx.y) * N + col];
 
         __syncthreads();
 
-        for (int k = 0; k < 16; k++) {
+        for (int k = 0; k < TILE_SIZE; k++) {
             Cvalue += A_shared[threadIdx.y][k] * B_shared[k][threadIdx.x];
         }
-
-        __syncthreads();
     }
 
     if (row < M && col < N)
         C[row * N + col] = Cvalue;
+
 }
 
 
