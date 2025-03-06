@@ -6,6 +6,7 @@
 #include <iostream>
 #include <chrono>
 #include <cmath>
+#include <algorithm>
 #include "utils.cuh"
 
 // Tiled CUDA kernel for matrix multiplication using shared memory
@@ -49,7 +50,6 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         __syncthreads();
         
         // Compute partial sum
-        #pragma unroll
         for (int k = 0; k < TILE_SIZE; ++k) {
             if ((tileIdx * TILE_SIZE + k) < K) {
                 sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
@@ -94,30 +94,14 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     return result;
 }
 
-template <int TILE_SIZE>
-inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K) {
+
+
+inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K, int tileSize) {
     float *d_A, *d_B, *d_C;
     float *h_A = new float[M * K];
     float *h_B = new float[K * N];
     float *h_C = new float[M * N];
     float *h_C_ref = new float[M * N];
-
-    int minGridSize, blockSize;
-
-    auto kernel = [](int M, int N, int K, float* d_A, float* d_B, float* d_C) {
-        matrixMulTiled<TILE_SIZE><<<dim3((N + TILE_SIZE - 1) / TILE_SIZE, (M + TILE_SIZE - 1) / TILE_SIZE), dim3(TILE_SIZE, TILE_SIZE)>>>(
-            d_A, d_B, d_C, M, N, K);
-    };
-
-    cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, 
-        reinterpret_cast<void(*)(float*, float*, float*, int, int, int)>(kernel), 
-        0, 0);
-
-    blockSize = std::max(blockSize, 1);
-
-    // Set optimal grid and block sizes
-    dim3 threadsPerBlock(blockSize, blockSize);
-    dim3 gridSize((N + TILE_SIZE - 1) / TILE_SIZE, (M + TILE_SIZE - 1) / TILE_SIZE);
 
     // Initialize host memory with random values
     for (int i = 0; i < M * K; ++i) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
@@ -128,17 +112,27 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Launch the kernel
+    // Query device properties for optimal block size
+    int minGridSize, blockSize;
+    cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<tileSize>, 0, 0);
+    
+    int threadsPerBlock = std::min(blockSize, 1024);  // Ensure we don't exceed max threads per block
+    dim3 blockDim(threadsPerBlock / tileSize, tileSize);
+    
+    // Compute grid dimensions
+    dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
+
+    // Launch the kernel with dynamically determined block/grid size
     auto result = measurePerformance([&]() {
-        switch (TILE_SIZE) {
+        switch (tileSize) {
             case 8:
-                matrixMulTiled<8><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<8><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                matrixMulTiled<16><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<32><<<gridSize, threadsPerBlock>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
@@ -154,27 +148,20 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
 
     // Compute error metrics
     double mse = 0.0, max_error = 0.0;
+    int error_count = 0;
+    double error_threshold = 1e-3; // Acceptable error threshold
+
     for (int i = 0; i < M * N; ++i) {
         double diff = fabs(h_C[i] - h_C_ref[i]);
         mse += diff * diff;
         max_error = std::max(max_error, diff);
+        if (diff > error_threshold) error_count++;
     }
     mse /= (M * N);
-    
-    double error_threshold = 1e-3; // Define an acceptable error threshold
-int error_count = 0;
+    double error_percentage = (error_count * 100.0) / (M * N);
 
-for (int i = 0; i < M * N; ++i) {
-    double diff = fabs(h_C[i] - h_C_ref[i]);
-    if (diff > error_threshold) { // Consider it an error if the difference is too large
-        error_count++;
-    }
-}
-
-double error_percentage = (error_count * 100.0) / (M * N);
-
-std::cout << "Error Percentage: " << error_percentage << "%" << std::endl;
     // Print error results
+    std::cout << "Error Percentage: " << error_percentage << "%" << std::endl;
     std::cout << "Mean Squared Error: " << mse << std::endl;
     std::cout << "Max Absolute Error: " << max_error << std::endl;
 
@@ -187,5 +174,6 @@ std::cout << "Error Percentage: " << error_percentage << "%" << std::endl;
 
     return result;
 }
+
 
 #endif
