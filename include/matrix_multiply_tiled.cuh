@@ -20,7 +20,12 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
 
     float sum = 0.0f;
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
+    
+    if (threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
+        printf("tileA[0][0] = %f, tileB[0][0] = %f\n", tileA[0][0], tileB[0][0]);
+    }
 
+    
     for (int tileIdx = 0; tileIdx < numTiles; ++tileIdx) {
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
@@ -48,8 +53,15 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         // ✅ Compute only valid tile region
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
-            sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
+            if (threadIdx.y < TILE_SIZE && threadIdx.x < TILE_SIZE) {  // Ensure valid work
+                sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
+            }
         }
+
+        if (row < 5 && col < 5) {
+            printf("C[%d][%d] partial sum: %f\n", row, col, sum);
+        }
+        
 
         __syncthreads();
     }
