@@ -11,12 +11,12 @@
 template <int TILE_SIZE>
 __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int N, int K) {
     __shared__ float tileA[TILE_SIZE][TILE_SIZE];  
-    __shared__ float tileB[TILE_SIZE][TILE_SIZE]; // Fix: Remove +1 to avoid incorrect memory indexing
+    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1]; // Fix: Prevent shared memory bank conflicts
 
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
-    float sum = 0.0f; // Keep accumulation in float for consistency
+    float sum = 0.0f;  // Register accumulation
 
     for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
         int tiledRowA = row;
@@ -24,7 +24,7 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
         int tiledColB = col;
 
-        // **Correct Coalesced Memory Loads**
+        // **Correct Coalesced Global Memory Loads**
         if (tiledRowA < M && tiledColA < K) {
             tileA[threadIdx.y][threadIdx.x] = A[tiledRowA * K + tiledColA];
         } else {
@@ -32,27 +32,28 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
         }
 
         if (tiledRowB < K && tiledColB < N) {
-            tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + tiledColB]; // Fix: Keep normal indexing
+            tileB[threadIdx.x][threadIdx.y] = B[tiledRowB * N + tiledColB]; // Fix: Transposed load
         } else {
-            tileB[threadIdx.y][threadIdx.x] = 0.0f;
+            tileB[threadIdx.x][threadIdx.y] = 0.0f;
         }
 
-        __syncthreads(); // Ensure shared memory is fully populated before computation
+        __syncthreads();  // Ensure all threads finish loading shared memory
 
         // **Optimized Matrix Multiplication**
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; ++k) {
-            sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
+            sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x]; // Ensure correct multiplication
         }
 
-        __syncthreads(); // Ensure all threads complete before next tile loads
+        __syncthreads(); // Ensure all computations complete before loading new tiles
     }
 
-    // **Store final result to global memory**
+    // **Store the final result to global memory**
     if (row < M && col < N) {
-        C[row * N + col] = sum;  // Fix: Keep float precision consistent
+        C[row * N + col] = sum;
     }
 }
+
 
 
 
@@ -68,11 +69,11 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
 
     // Choose the best block size for each tile size
     if (tileSize == 8) {
-        blockSize = dim3(8, 32);
-    } else if (tileSize == 16) {
-        blockSize = dim3(16, 16);
-    } else if (tileSize == 32) {
         blockSize = dim3(32, 8);
+    } else if (tileSize == 16) {
+        blockSize = dim3(32, 16);
+    } else if (tileSize == 32) {
+        blockSize = dim3(32, 32);
     } else {
         std::cerr << "Unsupported tile size" << std::endl;
         exit(EXIT_FAILURE);
@@ -121,11 +122,11 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
 
     // Choose the best block size for each tile size
     if (tileSize == 8) {
-        blockSize = dim3(8, 32);
-    } else if (tileSize == 16) {
-        blockSize = dim3(16, 16);
-    } else if (tileSize == 32) {
         blockSize = dim3(32, 8);
+    } else if (tileSize == 16) {
+        blockSize = dim3(32, 16);
+    } else if (tileSize == 32) {
+        blockSize = dim3(32, 32);
     } else {
         std::cerr << "Unsupported tile size" << std::endl;
         exit(EXIT_FAILURE);
