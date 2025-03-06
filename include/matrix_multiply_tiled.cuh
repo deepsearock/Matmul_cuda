@@ -23,14 +23,14 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
     for (int tileIdx = 0; tileIdx < numTiles; ++tileIdx) {
-        int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
-        int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
+        int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;  // Column index for A
+        int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;  // Row index for B
 
-        // ✅ Fix: Ensure all threads load correctly
+        // ✅ Fix: Load ONLY valid memory regions for non-square matrices
         if (row < M && tiledColA < K) {
             tileA[threadIdx.y][threadIdx.x] = A[row * K + tiledColA];
         } else {
-            tileA[threadIdx.y][threadIdx.x] = 0.0f;
+            tileA[threadIdx.y][threadIdx.x] = 0.0f; // Zero out invalid values
         }
 
         if (tiledRowB < K && col < N) {
@@ -39,21 +39,23 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
             tileB[threadIdx.y][threadIdx.x] = 0.0f;
         }
 
-        __syncthreads();  // ✅ Ensure all threads finish loading before computation
+        __syncthreads();  // ✅ Ensure all values are loaded before computation
 
-        // ✅ Fix: Correct tile computation
-        for (int k = 0; k < TILE_SIZE; k++) {
+        // ✅ Fix: Ensure only valid elements are used in computation
+        int validK = min(K - tileIdx * TILE_SIZE, TILE_SIZE);
+        for (int k = 0; k < validK; k++) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
 
-        __syncthreads();  // ✅ Ensure threads sync before loading new tile
+        __syncthreads();  // ✅ Ensure computation completes before loading next tile
     }
 
-    // ✅ Fix: Ensure correct memory write
+    // ✅ Fix: Prevent out-of-bounds writes for non-square matrices
     if (row < M && col < N) {
         C[row * N + col] = sum;
     }
 }
+
 
 
 
