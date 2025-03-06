@@ -108,20 +108,20 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     float *d_A, *d_B, *d_C;
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
 
-    dim3 blockDim(128, 8);
-    dim3 gridDim((N + 128 - 1) / 128, (M + 128 - 1) / 128);
+    dim3 blockDim(64, 16);
+    dim3 gridDim((N + 64 - 1) / 64, (M + 64 - 1) / 64);
 
     // Launch kernel using runtime-determined grid and block sizes
     auto result = measurePerformance([&]() {
         switch (tileSize) {
             case 8:
-                matrixMulTiled<128, 8, 128><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<64, 16, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                matrixMulTiled<128, 8, 128><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<64, 16, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<128, 8, 128><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<64, 16, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
@@ -149,20 +149,20 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
-    dim3 blockDim(128, 8);
-    dim3 gridDim((N + 128 - 1) / 128, (M + 128 - 1) / 128);
+    dim3 blockDim(64, 16);
+    dim3 gridDim((N + 64 - 1) / 64, (M + 64 - 1) / 64);
 
     // Launch kernel using runtime-determined grid and block sizes
     auto result = measurePerformance([&]() {
         switch (tileSize) {
             case 8:
-                matrixMulTiled<128, 8, 128><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<64, 16, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                matrixMulTiled<128, 8, 128><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<64, 16, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<128, 8, 128><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<64, 16, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
