@@ -40,7 +40,6 @@ __global__ void matrixMulTiled(
 
     // Each thread accumulates MICRO_TILE_ROWS results in registers.
     float accum[MICRO_TILE_ROWS];
-    #pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         accum[i] = 0.0f;
     }
