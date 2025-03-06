@@ -82,14 +82,23 @@ __global__ void matrixMulTiled(
         // Compute partial products.
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
-            float bVal = Bs[k][tx];
+            float bVal = Bs[k][tx]; // Load once into register
+
             #pragma unroll
-            for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-                int rowIndex = ty + i * BLOCK_DIM_Y;
-                // rowIndex is guaranteed to be < TILE_SIZE since TILE_SIZE / BLOCK_DIM_Y = MICRO_TILE_ROWS.
-                accum[i] += As[rowIndex][k] * bVal;
+            for (int i = 0; i < MICRO_TILE_ROWS; i += 2) { // Process two rows per iteration
+                int rowIndex0 = ty + i * BLOCK_DIM_Y;
+                int rowIndex1 = rowIndex0 + BLOCK_DIM_Y; // Next row in the micro-tile
+
+                // Ensure rowIndex1 is within TILE_SIZE
+                if (rowIndex1 < TILE_SIZE) {
+                    accum[i]   += As[rowIndex0][k] * bVal;
+                    accum[i+1] += As[rowIndex1][k] * bVal;
+                } else {
+                    accum[i] += As[rowIndex0][k] * bVal;
+                }
             }
         }
+
 
         __syncthreads();  // Wait before loading the next tile.
     }
