@@ -24,65 +24,79 @@ __global__ void matrixMulTiled(
     float * __restrict__ C,
     int M, int N, int K)
 {
+    // Ensure TILE_SIZE is divisible by WARP_SIZE for efficient tiling.
     constexpr int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y;
     constexpr int MICRO_TILE_COLS = TILE_SIZE / BLOCK_DIM_X;
 
+    // Block and thread indices
     int bx = blockIdx.x, by = blockIdx.y;
     int tx = threadIdx.x, ty = threadIdx.y;
 
+    // Warp-level indices
     int warp_id = (ty / (WARP_SIZE / BLOCK_DIM_X));  // Warp row index
     int lane_id = tx;  // Lane within the warp
 
+    // Compute tile location
     int rowTile = by * TILE_SIZE;
     int colTile = bx * TILE_SIZE;
     int col = colTile + tx;
 
-    // Use registers instead of shared memory where possible
+    // Registers for accumulation (per thread)
     float accum[MICRO_TILE_ROWS][MICRO_TILE_COLS] = {0.0f};
 
+    // Shared memory tiles
     __shared__ float As[TILE_SIZE][TILE_SIZE];
-    __shared__ float Bs[TILE_SIZE][TILE_SIZE];
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];  // Padding for bank conflicts
 
+    // Number of tiles in K dimension
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
+    // Iterate over tiles
     for (int t = 0; t < numTiles; t++) {
+        // Load A tile into shared memory with warp-wide coalesced access
 
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
             int colA = t * TILE_SIZE + tx;
-            As[ty + i * BLOCK_DIM_Y][tx] = (rowA < M && colA < K) ? A[rowA * K + colA] : 0.0f;
+            if (rowA < M && colA < K)
+                As[ty + i * BLOCK_DIM_Y][tx] = A[rowA * K + colA];
+            else
+                As[ty + i * BLOCK_DIM_Y][tx] = 0.0f;
         }
 
-        // Load B tile into shared memory using warp-wide coalescing
-        float regB[MICRO_TILE_COLS];
+        // Load B tile into shared memory (warp-wide loading)
 
-        for (int i = 0; i < MICRO_TILE_COLS; i++) {
-            int rowB = t * TILE_SIZE + ty + i * BLOCK_DIM_Y;
+        for (int i = warp_id; i < TILE_SIZE; i += (BLOCK_DIM_Y / (WARP_SIZE / BLOCK_DIM_X))) {
+            int rowB = t * TILE_SIZE + i;
             int colB = colTile + lane_id;
-            regB[i] = (rowB < K && colB < N) ? B[rowB * N + colB] : 0.0f;
-            Bs[ty + i * BLOCK_DIM_Y][lane_id] = regB[i];
+            if (rowB < K && colB < N)
+                Bs[i][lane_id] = B[rowB * N + colB];
+            else
+                Bs[i][lane_id] = 0.0f;
         }
 
-        __syncthreads();
+        __syncthreads();  // Ensure both tiles are loaded
 
-        // Compute partial products with warp-level optimizations
+        // Compute partial products using warp tiling
 
         for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = Bs[k][lane_id];
+
+
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-                accum[i][0] += As[ty + i * BLOCK_DIM_Y][k] * bVal;
+                int rowIndex = ty + i * BLOCK_DIM_Y;
+                accum[i][0] += As[rowIndex][k] * bVal;
             }
         }
 
-        __syncthreads();
+        __syncthreads();  // Wait before loading the next tile
     }
 
-    // Store results back to global memory efficiently
+    // Write computed values to global memory
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         int rowC = rowTile + ty + i * BLOCK_DIM_Y;
-        if (rowC < M && col < N) {
+        if (rowC < M && col < N)
             C[rowC * N + col] = accum[i][0];
-        }
     }
 }
 
