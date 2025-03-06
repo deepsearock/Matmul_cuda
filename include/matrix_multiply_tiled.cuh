@@ -55,7 +55,6 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
 }
 
 
-
 // wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
     float *d_A, *d_B, *d_C;
