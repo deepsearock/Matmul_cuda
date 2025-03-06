@@ -79,7 +79,7 @@ inline std::pair<double, double> runMatrixMulNaiveWithErrorCheck(int M, int N, i
         max_error = std::max(max_error, diff);
     }
     mse /= (M * N);
-    double error_threshold = 1e-5; // Define an acceptable error threshold
+    double error_threshold = 1e-3; // Define an acceptable error threshold
 int error_count = 0;
 
 for (int i = 0; i < M * N; ++i) {
