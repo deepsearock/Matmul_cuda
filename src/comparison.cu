@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     std::cout << "  B (" << colDimA << "x" << colDimB << ")" << std::endl;
     std::cout << "  C (" << rowDimA << "x" << colDimB << ")" << std::endl;
 
-    int tileSizes[] = {8, 16, 32};
+    int tileSizes[] = {16, 32, 64};
     std::pair<int, int> blockConfigs[] = {{32, 32}, {16, 16}};
 
     for (int tileSize : tileSizes) {
