@@ -17,51 +17,50 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
 
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
-    if (threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
-        printf("tileA[0][0] = %f, tileB[0][0] = %f\n", tileA[0][0], tileB[0][0]);
-    }
     
     float sum = 0.0f;
 
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
     for (int tileIdx = 0; tileIdx < numTiles; ++tileIdx) {
-        int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;  // Column index for A
-        int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;  // Row index for B
+        int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
+        int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
 
-        // ✅ Fix: Load ONLY valid memory regions for non-square matrices
-        if (row < M && tiledColA < K) {
-            tileA[threadIdx.y][threadIdx.x] = A[row * K + tiledColA];
-        } else {
-            tileA[threadIdx.y][threadIdx.x] = 0.0f; // Zero out invalid values
+        // ✅ Fix: Ensure all threads properly load shared memory (especially for 32x8 blocks)
+        for (int i = 0; i < TILE_SIZE; i += blockDim.y) {  
+            int loadRowA = row + i;
+            int loadRowB = tiledRowB + i;
+
+            if (loadRowA < M && tiledColA < K) {
+                tileA[threadIdx.y + i][threadIdx.x] = A[loadRowA * K + tiledColA];
+            } else {
+                tileA[threadIdx.y + i][threadIdx.x] = 0.0f;
+            }
+
+            if (loadRowB < K && col < N) {
+                tileB[threadIdx.y + i][threadIdx.x] = B[loadRowB * N + col];
+            } else {
+                tileB[threadIdx.y + i][threadIdx.x] = 0.0f;
+            }
         }
 
-        if (tiledRowB < K && col < N) {
-            tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + col];
-        } else {
-            tileB[threadIdx.y][threadIdx.x] = 0.0f;
-        }
+        __syncthreads();  // ✅ Fix: Ensure all threads finish loading shared memory
 
-        __syncthreads();  // ✅ Ensure all values are loaded before computation
-
-        // ✅ Fix: Ensure only valid elements are used in computation
+        // ✅ Fix: Compute only valid elements in the tile
         int validK = min(K - tileIdx * TILE_SIZE, TILE_SIZE);
         for (int k = 0; k < validK; k++) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
-        if (row < 5 && col < 5) {
-            printf("C[%d][%d] partial sum: %f\n", row, col, sum);
-        }
-        
 
-        __syncthreads();  // ✅ Ensure computation completes before loading next tile
+        __syncthreads();  // ✅ Fix: Synchronize before loading the next tile
     }
 
-    // ✅ Fix: Prevent out-of-bounds writes for non-square matrices
+    // ✅ Fix: Ensure only valid threads write results
     if (row < M && col < N) {
         C[row * N + col] = sum;
     }
 }
+
 
 
 
