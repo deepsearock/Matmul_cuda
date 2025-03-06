@@ -14,11 +14,7 @@ template <int TILE_SIZE>
 // Templated tiled matrix multiplication kernel.
 // The tile size is provided as a template parameter.
 // Block dimensions in y can vary.
-template <int TILE_SIZE>
-__global__ void matrixMulTiled(const float *__restrict__ A,
-                               const float *__restrict__ B,
-                               float *__restrict__ C,
-                               int M, int N, int K) {
+__global__ void matrixMulTiled(const float *__restrict__ A, const float *__restrict__ B, float *__restrict__ C, int M, int N, int K) {
     // Determine how many rows in the TILE each thread is responsible for.
     // Each thread starts at row "threadIdx.y" and then takes steps of size blockDim.y.
     int numRowsForThisThread = (TILE_SIZE - threadIdx.y + blockDim.y - 1) / blockDim.y;
