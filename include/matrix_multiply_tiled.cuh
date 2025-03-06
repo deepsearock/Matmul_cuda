@@ -15,13 +15,15 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     __shared__ float A_shared[16][16 + 1];
     __shared__ float B_shared[16][16 + 1];
 
+    cudaFuncSetCacheConfig(matrixMulTiled, cudaFuncCachePreferShared);
+
     int row = blockIdx.y * 16 + threadIdx.y;
     int col = blockIdx.x * 16 + threadIdx.x;
     float Cvalue = 0.0f;
 
     for (int tile = 0; tile < (K + 15) / 16; tile++) {
         // Load data into shared memory using warp striping
-        for (int i = 0; i < 16; i += WARP_SIZE) {
+        for (int i = 0; i < 16; i += 32) {
             if (row + i < M && tile * 16 + threadIdx.x < K)
                 A_shared[threadIdx.y + i][threadIdx.x] = A[(row + i) * K + tile * 16 + threadIdx.x];
 
@@ -65,7 +67,6 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
             std::cerr << "Unsupported tile size" << std::endl;
             exit(EXIT_FAILURE);
     }
-    cudaFuncSetCacheConfig(matrixMulTiled, cudaFuncCachePreferShared);
 
     int threadsPerBlock = std::min(blockSize, 1024);  // Ensure we don't exceed max threads per block
     dim3 blockDim(tileSize, tileSize);
@@ -110,7 +111,6 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
     int minGridSize, blockSize;
-    cudaFuncSetCacheConfig(matrixMulTiled, cudaFuncCachePreferShared);
 
     // Determine block size dynamically based on tile size
     switch (tileSize) {
