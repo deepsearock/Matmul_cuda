@@ -50,6 +50,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         __syncthreads();
         
         // Compute partial sum
+        #pragma unroll
         for (int k = 0; k < TILE_SIZE; ++k) {
                 sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
             
