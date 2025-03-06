@@ -15,31 +15,31 @@
 // This version uses padding for the B tile to reduce bank conflicts,
 // unrolls the inner loop, and uses __restrict__ qualifiers.
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
-__global__ void matrixMulTiled(
+__global__ void matrixMulTiledOpt(
     const float *__restrict__ A,
     const float *__restrict__ B,
     float *__restrict__ C,
     int M, int N, int K)
 {
     // Assume TILE_SIZE % BLOCK_DIM_Y == 0.
-    const int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y; // e.g. 32/8 = 4
+    // With TILE_SIZE=32 and BLOCK_DIM_Y=8, MICRO_TILE_ROWS = 4.
+    const int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y;
 
-    // Block indices
+    // Block indices.
     int bx = blockIdx.x;
     int by = blockIdx.y;
-    // Thread indices
-    int tx = threadIdx.x;  // 0 .. BLOCK_DIM_X-1   (should equal 32)
-    int ty = threadIdx.y;  // 0 .. BLOCK_DIM_Y-1   (should equal 8)
+    // Thread indices.
+    int tx = threadIdx.x;   // expected: 0 ... BLOCK_DIM_X-1 (should be 32)
+    int ty = threadIdx.y;   // expected: 0 ... BLOCK_DIM_Y-1 (should be 8)
 
-    // Compute the starting coordinates of the tile in C.
+    // Starting coordinates for this tile in C.
     int rowTile = by * TILE_SIZE;
     int colTile = bx * TILE_SIZE;
-    // Global column index for output.
     int col = colTile + tx;
 
-    // Each thread will compute MICRO_TILE_ROWS output elements (its micro-tile) in registers.
+    // Each thread computes MICRO_TILE_ROWS outputs (its micro‑tile).
     float accum[MICRO_TILE_ROWS];
-    #pragma unroll
+#pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         accum[i] = 0.0f;
     }
@@ -47,14 +47,14 @@ __global__ void matrixMulTiled(
     // Declare double-buffered shared memory.
     // For A: no padding needed.
     __shared__ float As[2][TILE_SIZE][TILE_SIZE];
-    // For B: pad second dimension by 1 to reduce bank conflicts.
+    // For B: pad the second dimension by 1 to reduce bank conflicts.
     __shared__ float Bs[2][TILE_SIZE][TILE_SIZE + 1];
 
     // Number of tiles along the K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
     int pingpong = 0;
 
-    // --- Preload the first tile into buffer "pingpong" ---
+    // --- Preload the first tile synchronously into buffer "pingpong" ---
     if (numTiles > 0) {
         #pragma unroll
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
@@ -73,11 +73,11 @@ __global__ void matrixMulTiled(
     }
     __syncthreads();
 
-    // --- Loop over tiles ---
+    // --- Loop over all tiles ---
     for (int t = 0; t < numTiles; t++) {
         int nextTile = t + 1;
         int nextPingpong = 1 - pingpong;
-        // Preload the next tile into the alternate buffer if available.
+        // Synchronously preload the next tile (if available) into the alternate buffer.
         if (nextTile < numTiles) {
             #pragma unroll
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
@@ -96,11 +96,11 @@ __global__ void matrixMulTiled(
         }
         __syncthreads();
 
-        // Compute partial products using the tile in the current pingpong buffer.
-        #pragma unroll
+        // --- Compute partial products using the current tile in the pingpong buffer ---
+#pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = Bs[pingpong][k][tx];
-            #pragma unroll
+#pragma unroll
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                 int rowIndex = ty + i * BLOCK_DIM_Y;
                 accum[i] += As[pingpong][rowIndex][k] * bVal;
@@ -108,19 +108,20 @@ __global__ void matrixMulTiled(
         }
         __syncthreads();
 
-        // Switch buffers if there is another tile.
+        // Switch buffers if there is a next tile.
         if (nextTile < numTiles)
             pingpong = nextPingpong;
     }
 
-    // --- Write the computed micro-tile back to global memory ---
-    #pragma unroll
+    // --- Write the computed micro‑tile back to global memory ---
+#pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         int rowC = rowTile + ty + i * BLOCK_DIM_Y;
         if (rowC < M && col < N)
             C[rowC * N + col] = accum[i];
     }
 }
+
 
 
 
