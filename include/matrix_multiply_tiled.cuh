@@ -11,7 +11,7 @@
 template <int TILE_SIZE>
 __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int N, int K) {
     __shared__ float tileA[TILE_SIZE][TILE_SIZE];  
-    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1]; // Fix: Avoid shared memory bank conflicts
+    __shared__ float tileB[TILE_SIZE][TILE_SIZE]; // Fix: Remove +1 to avoid incorrect memory indexing
 
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
@@ -24,7 +24,7 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
         int tiledColB = col;
 
-        // **Coalesced Global Memory Loads**
+        // **Correct Coalesced Memory Loads**
         if (tiledRowA < M && tiledColA < K) {
             tileA[threadIdx.y][threadIdx.x] = A[tiledRowA * K + tiledColA];
         } else {
@@ -32,12 +32,12 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
         }
 
         if (tiledRowB < K && tiledColB < N) {
-            tileB[threadIdx.x][threadIdx.y] = B[tiledRowB * N + tiledColB]; // Fix: Use transposed access for coalescing
+            tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + tiledColB]; // Fix: Keep normal indexing
         } else {
-            tileB[threadIdx.x][threadIdx.y] = 0.0f;
+            tileB[threadIdx.y][threadIdx.x] = 0.0f;
         }
 
-        __syncthreads(); // Fix: Ensure shared memory is fully populated before using
+        __syncthreads(); // Ensure shared memory is fully populated before computation
 
         // **Optimized Matrix Multiplication**
         #pragma unroll
@@ -45,14 +45,15 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
         }
 
-        __syncthreads(); // Fix: Ensure all computations are done before next tile loads
+        __syncthreads(); // Ensure all threads complete before next tile loads
     }
 
     // **Store final result to global memory**
     if (row < M && col < N) {
-        C[row * N + col] = sum;  // Fix: Keep in `float`
+        C[row * N + col] = sum;  // Fix: Keep float precision consistent
     }
 }
+
 
 
 // wrapper function that measures performance and does memory management
