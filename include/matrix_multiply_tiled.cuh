@@ -103,10 +103,6 @@ __global__ void matrixMulTiled(
     }
     
 
-
-        __syncthreads();  // Wait before loading the next tile.
-    }
-
     // Write the computed micro‑tile back to global memory.
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         int rowC = rowTile + ty + i * BLOCK_DIM_Y;
