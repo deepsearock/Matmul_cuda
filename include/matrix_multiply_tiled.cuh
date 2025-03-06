@@ -18,7 +18,7 @@
 #include <cstdint>
 #define WARP_SIZE 32
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
-_global__ void matrixMulWarpTiled(
+__global__ void matrixMulWarpTiled(
     const float * __restrict__ A,
     const float * __restrict__ B,
     float * __restrict__ C,
