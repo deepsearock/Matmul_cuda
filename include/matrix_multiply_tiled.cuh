@@ -136,11 +136,11 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int TILE
                 break;
             case 16:
                 blockSize = dim3(16, 16);
-                matrixMulTiledOptimized<16><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<16><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
                 blockSize = dim3(32, 8);
-                matrixMulTiledOptimized<32><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
