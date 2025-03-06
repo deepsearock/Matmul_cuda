@@ -8,24 +8,26 @@
 #include "utils.cuh"
 
 void printUsage() {
-    std::cout << "Usage: TiledMatrixMul -i <rowDimA> <colDimA> <colDimB>" << std::endl;
+    std::cout << "Usage: TiledMatrixMul -i <rowDimA> <colDimA> <colDimB> <gpu>" << std::endl;
     std::cout << "  <rowDimA>: Number of rows in matrix A and matrix C" << std::endl;
     std::cout << "  <colDimA>: Number of columns in matrix A (and number of rows in matrix B)" << std::endl;
     std::cout << "  <colDimB>: Number of columns in matrix B and matrix C" << std::endl;
+    std::cout << "  <gpu>: Select a GPU" << std::endl;
     exit(1);
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 5 || std::string(argv[1]) != "-i") {
+    if (argc != 6 || std::string(argv[1]) != "-i") {
         printUsage();
     }
 
     int rowDimA = std::atoi(argv[2]);
     int colDimA = std::atoi(argv[3]);
     int colDimB = std::atoi(argv[4]);
+    int gpuIndex = std::atoi(argv[5]);
 
     printGpuSpecs();
-    gpuselect(3);
+    gpuselect(gpuIndex);
     std::cout << "Matrix dimensions: " << std::endl;
     std::cout << "  A (" << rowDimA << "x" << colDimA << ")" << std::endl;
     std::cout << "  B (" << colDimA << "x" << colDimB << ")" << std::endl;
