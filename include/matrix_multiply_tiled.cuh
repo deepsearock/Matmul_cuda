@@ -7,9 +7,11 @@
 #include <chrono>
 #include <cmath>
 #include "utils.cuh"
+#include <cuda_fp16.h>
+#include <mma.h>
 
 template <int TILE_SIZE>
-__global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
+__global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int N, int K) {
     __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
     __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
 
@@ -18,17 +20,16 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
     // Register accumulation for better performance
-    float sum[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float sum = 0.0f;
 
     // Iterate over tiles
     for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
-        // Compute tile positions
+        // Load tiles into shared memory using vectorized loads for coalesced memory access
         int tiledRowA = row;
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
         int tiledColB = col;
 
-        // Load tiles using coalesced memory access
         if (tiledRowA < M && tiledColA < K) {
             tileA[threadIdx.y][threadIdx.x] = A[tiledRowA * K + tiledColA];
         } else {
@@ -43,71 +44,102 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
 
         __syncthreads(); // Synchronize before computation
 
-        // Perform matrix multiplication using loop unrolling
+        // Use loop unrolling for TILE_SIZE = 32
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; k += 4) {
-            sum[0] += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
-            sum[0] += tileA[threadIdx.y][k+1] * tileB[k+1][threadIdx.x];
-            sum[0] += tileA[threadIdx.y][k+2] * tileB[k+2][threadIdx.x];
-            sum[0] += tileA[threadIdx.y][k+3] * tileB[k+3][threadIdx.x];
-
-            if (threadIdx.y + 8 < TILE_SIZE) {
-                sum[1] += tileA[threadIdx.y + 8][k] * tileB[k][threadIdx.x];
-                sum[1] += tileA[threadIdx.y + 8][k+1] * tileB[k+1][threadIdx.x];
-                sum[1] += tileA[threadIdx.y + 8][k+2] * tileB[k+2][threadIdx.x];
-                sum[1] += tileA[threadIdx.y + 8][k+3] * tileB[k+3][threadIdx.x];
-            }
-
-            if (threadIdx.y + 16 < TILE_SIZE) {
-                sum[2] += tileA[threadIdx.y + 16][k] * tileB[k][threadIdx.x];
-                sum[2] += tileA[threadIdx.y + 16][k+1] * tileB[k+1][threadIdx.x];
-                sum[2] += tileA[threadIdx.y + 16][k+2] * tileB[k+2][threadIdx.x];
-                sum[2] += tileA[threadIdx.y + 16][k+3] * tileB[k+3][threadIdx.x];
-            }
-
-            if (threadIdx.y + 24 < TILE_SIZE) {
-                sum[3] += tileA[threadIdx.y + 24][k] * tileB[k][threadIdx.x];
-                sum[3] += tileA[threadIdx.y + 24][k+1] * tileB[k+1][threadIdx.x];
-                sum[3] += tileA[threadIdx.y + 24][k+2] * tileB[k+2][threadIdx.x];
-                sum[3] += tileA[threadIdx.y + 24][k+3] * tileB[k+3][threadIdx.x];
-            }
+            sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
+            sum += tileA[threadIdx.y][k+1] * tileB[k+1][threadIdx.x];
+            sum += tileA[threadIdx.y][k+2] * tileB[k+2][threadIdx.x];
+            sum += tileA[threadIdx.y][k+3] * tileB[k+3][threadIdx.x];
         }
 
         __syncthreads(); // Synchronize before loading next tiles
     }
 
-    // Store results back in global memory with bounds checking
+    // Store results back in global memory
     if (row < M && col < N) {
-        C[row * N + col] = sum[0];
+        C[row * N + col] = sum;
     }
-    if ((row + 8) < M && col < N) {
-        C[(row + 8) * N + col] = sum[1];
+
+
+template <int TILE_SIZE>
+__global__ void matrixMulTensorCore(half *A, half *B, float *C, int M, int N, int K) {
+    // Define WMMA tile size
+    constexpr int WMMA_M = 16;
+    constexpr int WMMA_N = 16;
+    constexpr int WMMA_K = 16;
+
+    // Compute tile position
+    int warpM = (blockIdx.y * blockDim.y + threadIdx.y) / 16;
+    int warpN = (blockIdx.x * blockDim.x + threadIdx.x) / 16;
+
+    // Shared memory for input matrices
+    __shared__ half tileA[TILE_SIZE][TILE_SIZE];
+    __shared__ half tileB[TILE_SIZE][TILE_SIZE];
+
+    // Accumulator register
+    wmma::fragment<wmma::accumulator, WMMA_M, WMMA_N, WMMA_K, float> acc;
+    wmma::fill_fragment(acc, 0.0f);
+
+    // Iterate over tiles
+    for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; tileIdx++) {
+        // Load tiles into shared memory
+        int row = warpM * TILE_SIZE + threadIdx.y;
+        int col = warpN * TILE_SIZE + threadIdx.x;
+
+        if (row < M && (tileIdx * TILE_SIZE + threadIdx.x) < K) {
+            tileA[threadIdx.y][threadIdx.x] = A[row * K + tileIdx * TILE_SIZE + threadIdx.x];
+        } else {
+            tileA[threadIdx.y][threadIdx.x] = __float2half(0.0f);
+        }
+
+        if ((tileIdx * TILE_SIZE + threadIdx.y) < K && col < N) {
+            tileB[threadIdx.y][threadIdx.x] = B[(tileIdx * TILE_SIZE + threadIdx.y) * N + col];
+        } else {
+            tileB[threadIdx.y][threadIdx.x] = __float2half(0.0f);
+        }
+
+        __syncthreads();
+
+        // Load fragments from shared memory to registers
+        wmma::fragment<wmma::matrix_a, WMMA_M, WMMA_N, WMMA_K, half, wmma::row_major> a_frag;
+        wmma::fragment<wmma::matrix_b, WMMA_M, WMMA_N, WMMA_K, half, wmma::col_major> b_frag;
+
+        wmma::load_matrix_sync(a_frag, &tileA[threadIdx.y][0], TILE_SIZE);
+        wmma::load_matrix_sync(b_frag, &tileB[0][threadIdx.x], TILE_SIZE);
+
+        // Matrix multiply and accumulate
+        wmma::mma_sync(acc, a_frag, b_frag, acc);
+        __syncthreads();
     }
-    if ((row + 16) < M && col < N) {
-        C[(row + 16) * N + col] = sum[2];
-    }
-    if ((row + 24) < M && col < N) {
-        C[(row + 24) * N + col] = sum[3];
+
+    // Store result back to global memory
+    if (warpM * TILE_SIZE + threadIdx.y < M && warpN * TILE_SIZE + threadIdx.x < N) {
+        wmma::store_matrix_sync(&C[(warpM * TILE_SIZE + threadIdx.y) * N + (warpN * TILE_SIZE + threadIdx.x)], acc, TILE_SIZE, wmma::mem_row_major);
     }
 }
 
 
 // wrapper function that measures performance and does memory management
-inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
+inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int TILESIZE) {
     float *d_A, *d_B, *d_C;
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
-
+    dim3 blockSize;
+    dim3 gridSize((N + TILE_SIZE - 1) / TILE_SIZE, (M + TILE_SIZE - 1) / TILE_SIZE);
     // launch kernel
     auto result = measurePerformance([&]() {
-        switch (tileSize) {
+        switch (TILESIZE) {
             case 8:
-                matrixMulTiled<8><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
+                blockSize = dim3(8, 8);
+                matrixMulTiled<8><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                matrixMulTiled<16><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
+                blockSize = dim3(16, 16);
+                matrixMulTiledOptimized<16><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
+                blockSize = dim3(32, 8);
+                matrixMulTiledOptimized<32><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
