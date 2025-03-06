@@ -10,27 +10,22 @@
 
 
 
-template <int TILE_SIZE, int BLOCK_X, int BLOCK_Y>
+template <int TILE_SIZE>
 __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int N, int K) {
     __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
     __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
 
-    // Compute global thread coordinates
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+    double sum = 0.0;  // Use double for more precision
 
-    // Use double for better floating-point precision
-    double sum = 0.0;
-
-    // Iterate over tiles
     for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
-        // Compute memory addresses
         int tiledRowA = row;
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
         int tiledColB = col;
 
-        // Load tiles into shared memory
+        // Load tiles correctly into shared memory
         if (tiledRowA < M && tiledColA < K) {
             tileA[threadIdx.y][threadIdx.x] = A[tiledRowA * K + tiledColA];
         } else {
@@ -45,7 +40,7 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
 
         __syncthreads();
 
-        // Perform matrix multiplication using loop unrolling
+        // Perform matrix multiplication
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; ++k) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
@@ -54,48 +49,57 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
         __syncthreads();
     }
 
-    // Store results back in global memory (cast back to float)
+    // Store final result back to global memory
     if (row < M && col < N) {
         C[row * N + col] = (float)sum;
     }
 }
 
 // wrapper function that measures performance and does memory management
-inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int TILE_SIZE) {
+inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
     float *d_A, *d_B, *d_C;
+    
+    // Allocate device memory
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
-    dim3 blockSize;
-    dim3 gridSize((N + TILE_SIZE - 1) / TILE_SIZE, (M + TILE_SIZE - 1) / TILE_SIZE);
+
+    // Define grid and block sizes dynamically
+    dim3 blockSize, gridSize((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
+
+    // Choose the best block size for each tile size
+    if (tileSize == 8) {
+        blockSize = dim3(8, 32);
+    } else if (tileSize == 16) {
+        blockSize = dim3(16, 16);
+    } else if (tileSize == 32) {
+        blockSize = dim3(32, 8);
+    } else {
+        std::cerr << "Unsupported tile size" << std::endl;
+        exit(EXIT_FAILURE);
+    }
 
     // Run kernel and measure performance
     auto result = measurePerformance([&]() {
-        switch (TILE_SIZE) {
+        switch (tileSize) {
             case 8:
-                blockSize = dim3(8, 32);  // Best config for TILE_SIZE = 8
-                matrixMulTiledOptimized<8, 8, 32><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiledOptimized<8><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                blockSize = dim3(16, 16); // Best config for TILE_SIZE = 16
-                matrixMulTiledOptimized<16, 16, 16><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiledOptimized<16><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                blockSize = dim3(32, 8);  // Best config for TILE_SIZE = 32
-                matrixMulTiledOptimized<32, 32, 8><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiledOptimized<32><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
-            default:
-                std::cerr << "Unsupported tile size" << std::endl;
-                exit(EXIT_FAILURE);
         }
     }, M, N, K);
+
 
     // Free device memory
     freeDeviceMemory(d_A, d_B, d_C);
 
     return result;
-
 }
 
-inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K, int TILE_SIZE) {
+inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K, int tileSize) {
     float *d_A, *d_B, *d_C;
     float *h_A = new float[M * K];
     float *h_B = new float[K * N];
@@ -111,31 +115,36 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Launch the kernel
-    dim3 blockSize;
-    dim3 gridSize((N + TILE_SIZE - 1) / TILE_SIZE, (M + TILE_SIZE - 1) / TILE_SIZE);
 
-    // Run kernel and measure performance
+    dim3 blockSize, gridSize((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
+
+    // Choose the best block size for each tile size
+    if (tileSize == 8) {
+        blockSize = dim3(8, 32);
+    } else if (tileSize == 16) {
+        blockSize = dim3(16, 16);
+    } else if (tileSize == 32) {
+        blockSize = dim3(32, 8);
+    } else {
+        std::cerr << "Unsupported tile size" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+     // Run kernel and measure performance
     auto result = measurePerformance([&]() {
-        switch (TILE_SIZE) {
+        switch (tileSize) {
             case 8:
-                blockSize = dim3(8, 32);  // Best config for TILE_SIZE = 8
-                matrixMulTiledOptimized<8, 8, 32><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiledOptimized<8><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                blockSize = dim3(16, 16); // Best config for TILE_SIZE = 16
-                matrixMulTiledOptimized<16, 16, 16><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiledOptimized<16><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                blockSize = dim3(32, 8);  // Best config for TILE_SIZE = 32
-                matrixMulTiledOptimized<32, 32, 8><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiledOptimized<32><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
-            default:
-                std::cerr << "Unsupported tile size" << std::endl;
-                exit(EXIT_FAILURE);
         }
     }, M, N, K);
-
+    
     // Copy results back to host
     cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
 
