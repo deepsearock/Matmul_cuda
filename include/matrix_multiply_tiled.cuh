@@ -61,6 +61,7 @@ __global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int
         C[row * N + col] = sum;
     }
 
+}
 
 template <int TILE_SIZE>
 __global__ void matrixMulTensorCore(half *A, half *B, float *C, int M, int N, int K) {
