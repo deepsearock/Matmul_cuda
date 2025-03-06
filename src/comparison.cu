@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
                 totalNaiveTime += naiveResult.second;
                 totalNaiveFlops += naiveResult.first;
 
-                auto tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
+                std::pair<double, double> tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
                 totalTiledTime += tiledResult.second;
                 totalTiledFlops += tiledResult.first;
             }
