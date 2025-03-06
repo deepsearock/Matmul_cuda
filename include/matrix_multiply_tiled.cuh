@@ -7,12 +7,11 @@
 #include <chrono>
 #include <cmath>
 #include "utils.cuh"
-#include <cuda_fp16.h>
-#include <mma.h>
 
 
-template <int TILE_SIZE>
-__global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
+
+template <int TILE_SIZE, int BLOCK_X, int BLOCK_Y>
+__global__ void matrixMulTiledOptimized(float *A, float *B, float *C, int M, int N, int K) {
     __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
     __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
 
@@ -20,17 +19,18 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
-    // Register accumulation for better performance
-    float sum = 0.0f;
+    // Use double for better floating-point precision
+    double sum = 0.0;
 
     // Iterate over tiles
     for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
-        // Load tiles into shared memory using vectorized loads for coalesced memory access
+        // Compute memory addresses
         int tiledRowA = row;
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
         int tiledColB = col;
 
+        // Load tiles into shared memory
         if (tiledRowA < M && tiledColA < K) {
             tileA[threadIdx.y][threadIdx.x] = A[tiledRowA * K + tiledColA];
         } else {
@@ -43,25 +43,21 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
             tileB[threadIdx.y][threadIdx.x] = 0.0f;
         }
 
-        __syncthreads(); // Synchronize before computation
+        __syncthreads();
 
-        // Use loop unrolling for TILE_SIZE = 32
+        // Perform matrix multiplication using loop unrolling
         #pragma unroll
-        for (int k = 0; k < TILE_SIZE; k += 4) {
+        for (int k = 0; k < TILE_SIZE; ++k) {
             sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
-            sum += tileA[threadIdx.y][k+1] * tileB[k+1][threadIdx.x];
-            sum += tileA[threadIdx.y][k+2] * tileB[k+2][threadIdx.x];
-            sum += tileA[threadIdx.y][k+3] * tileB[k+3][threadIdx.x];
         }
 
-        __syncthreads(); // Synchronize before loading next tiles
+        __syncthreads();
     }
 
-    // Store results back in global memory
+    // Store results back in global memory (cast back to float)
     if (row < M && col < N) {
-        C[row * N + col] = sum;
+        C[row * N + col] = (float)sum;
     }
-
 }
 
 // wrapper function that measures performance and does memory management
@@ -71,19 +67,22 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int TILE
     dim3 blockSize;
     dim3 gridSize((N + TILE_SIZE - 1) / TILE_SIZE, (M + TILE_SIZE - 1) / TILE_SIZE);
     // launch kernel
+    dim3 blockSize, gridSize((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
+
+    // Run kernel and measure performance
     auto result = measurePerformance([&]() {
-        switch (TILE_SIZE) {
+        switch (tileSize) {
             case 8:
-                blockSize = dim3(8, 8);
-                matrixMulTiled<8><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                blockSize = dim3(8, 32);  // Best config for TILE_SIZE = 8
+                matrixMulTiledOptimized<8, 8, 32><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                blockSize = dim3(16, 16);
-                matrixMulTiled<16><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                blockSize = dim3(16, 16); // Best config for TILE_SIZE = 16
+                matrixMulTiledOptimized<16, 16, 16><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                blockSize = dim3(32, 8);
-                matrixMulTiled<32><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
+                blockSize = dim3(32, 8);  // Best config for TILE_SIZE = 32
+                matrixMulTiledOptimized<32, 32, 8><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
@@ -91,9 +90,10 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int TILE
         }
     }, M, N, K);
 
+    // Free device memory
     freeDeviceMemory(d_A, d_B, d_C);
+
     return result;
-}
 
 inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K, int tileSize) {
     float *d_A, *d_B, *d_C;
@@ -112,16 +112,25 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
     // Launch the kernel
+    dim3 blockSize;
+    dim3 gridSize((N + TILE_SIZE - 1) / TILE_SIZE, (M + TILE_SIZE - 1) / TILE_SIZE);
+    // launch kernel
+    dim3 blockSize, gridSize((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
+
+    // Run kernel and measure performance
     auto result = measurePerformance([&]() {
         switch (tileSize) {
             case 8:
-                matrixMulTiled<8><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
+                blockSize = dim3(8, 32);  // Best config for TILE_SIZE = 8
+                matrixMulTiledOptimized<8, 8, 32><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                matrixMulTiled<16><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
+                blockSize = dim3(16, 16); // Best config for TILE_SIZE = 16
+                matrixMulTiledOptimized<16, 16, 16><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
+                blockSize = dim3(32, 8);  // Best config for TILE_SIZE = 32
+                matrixMulTiledOptimized<32, 32, 8><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
