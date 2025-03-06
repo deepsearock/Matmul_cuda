@@ -8,68 +8,63 @@
 #include <cmath>
 #include "utils.cuh"
 
+// Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    __shared__ float tileA[TILE_SIZE][TILE_SIZE];  
-    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1]; // Fix: Prevent shared memory bank conflicts
 
+    // assign shared memory for tile a and tile b
+    __shared__ float tileA[TILE_SIZE][TILE_SIZE + 1];  
+    __shared__ float tileB[TILE_SIZE][TILE_SIZE + 1];
+
+    // calculate the row and column indexes
     int row = blockIdx.y * TILE_SIZE + threadIdx.y;
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
-    float sum[4] = {0.0f, 0.0f, 0.0f, 0.0f};  // Use register blocking for better ILP
+     // Each thread computes multiple outputs
+     float sum[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
+    // Iterate over tiles
     for (int tileIdx = 0; tileIdx < (K + TILE_SIZE - 1) / TILE_SIZE; ++tileIdx) {
+        // Load tiles into shared memory
         int tiledRowA = row;
         int tiledColA = tileIdx * TILE_SIZE + threadIdx.x;
+        if (tiledRowA < M && tiledColA < K)
+            tileA[threadIdx.y][threadIdx.x] = A[tiledRowA * K + tiledColA];
+        else
+            tileA[threadIdx.y][threadIdx.x] = 0.0f;
+
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
         int tiledColB = col;
-
-        // **Vectorized Load for `A`**
-        if (tiledRowA < M && tiledColA < K) {
-            tileA[threadIdx.y][threadIdx.x] = A[tiledRowA * K + tiledColA];
-        } else {
-            tileA[threadIdx.y][threadIdx.x] = 0.0f;
-        }
-
-        // **Vectorized Load for `B` (Coalesced Global Memory Access)**
-        if (tiledRowB < K && tiledColB < N) {
+        if (tiledRowB < K && tiledColB < N)
             tileB[threadIdx.y][threadIdx.x] = B[tiledRowB * N + tiledColB];
-        } else {
+        else
             tileB[threadIdx.y][threadIdx.x] = 0.0f;
-        }
 
-        __syncthreads();  // Ensure shared memory is fully populated before computation
+        __syncthreads();
 
-        // **Optimized Matrix Multiplication with Register Blocking**
+        // Perform matrix multiplication using loop unrolling
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; ++k) {
             sum[0] += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
-            if ((threadIdx.y + 8) < TILE_SIZE)  
+            if (threadIdx.y + 8 < TILE_SIZE)  
                 sum[1] += tileA[threadIdx.y + 8][k] * tileB[k][threadIdx.x];
-            if ((threadIdx.y + 16) < TILE_SIZE) 
+            if (threadIdx.y + 16 < TILE_SIZE) 
                 sum[2] += tileA[threadIdx.y + 16][k] * tileB[k][threadIdx.x];
-            if ((threadIdx.y + 24) < TILE_SIZE) 
+            if (threadIdx.y + 24 < TILE_SIZE) 
                 sum[3] += tileA[threadIdx.y + 24][k] * tileB[k][threadIdx.x];
         }
 
-        __syncthreads(); // Ensure all computations complete before loading new tiles
+        __syncthreads();
     }
 
-    // **Store the final result to global memory**
+    // Store results back in global memory safely
     if (row < M && col < N) {
         C[row * N + col] = sum[0];
-    }
-    if ((row + 8) < M && col < N) {
-        C[(row + 8) * N + col] = sum[1];
-    }
-    if ((row + 16) < M && col < N) {
-        C[(row + 16) * N + col] = sum[2];
-    }
-    if ((row + 24) < M && col < N) {
-        C[(row + 24) * N + col] = sum[3];
+        if (row + 8 < M)  C[(row + 8) * N + col] = sum[1];
+        if (row + 16 < M) C[(row + 16) * N + col] = sum[2];
+        if (row + 24 < M) C[(row + 24) * N + col] = sum[3];
     }
 }
-
 
 // wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
@@ -83,10 +78,10 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
                 matrixMulTiled<8><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                matrixMulTiled<16><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 16)>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<16><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 32)>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
@@ -121,10 +116,10 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
                 matrixMulTiled<8><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 16:
-                matrixMulTiled<16><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 16)>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<16><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 32)>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32><<<dim3((N + 31) / 32, (M + 31) / 32), dim3(32, 8)>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
