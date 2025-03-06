@@ -7,9 +7,9 @@
 #include <unistd.h>
 int main() {
     // Set matrix dimensions
-    int M = 3000;  // Number of rows in A and C
-    int N = 3000;  // Number of columns in B and C
-    int K = 3000;  // Number of columns in A and rows in B
+    int M = 1000;  // Number of rows in A and C
+    int N = 1000;  // Number of columns in B and C
+    int K = 1000;  // Number of columns in A and rows in B
 
     int tileSize = 32;  // Tile size for tiled matrix multiplication
 
@@ -26,7 +26,7 @@ int main() {
     sleep(3);
     // Run naive matrix multiplication with error check
     std::cout << "\nRunning Naïve GPU Matrix Multiplication..." << std::endl;
-    auto naive_result = runMatrixMulNaiveWithErrorCheck(M, N, K, 8, 32);
+    auto naive_result = runMatrixMulNaiveWithErrorCheck(M, N, K, 32, 8);
 
     
     
