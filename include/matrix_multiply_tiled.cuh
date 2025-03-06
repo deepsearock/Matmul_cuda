@@ -46,7 +46,7 @@ __global__ void matrixMulTiled(
 
     // Shared memory tiles
     __shared__ float As[TILE_SIZE][TILE_SIZE];
-    __shared__ float Bs[TILE_SIZE][TILE_SIZE + 1];  // Padding for bank conflicts
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];  // Padding for bank conflicts
 
     // Number of tiles in K dimension
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
@@ -54,7 +54,7 @@ __global__ void matrixMulTiled(
     // Iterate over tiles
     for (int t = 0; t < numTiles; t++) {
         // Load A tile into shared memory with warp-wide coalesced access
-        #pragma unroll
+
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
             int colA = t * TILE_SIZE + tx;
@@ -65,7 +65,7 @@ __global__ void matrixMulTiled(
         }
 
         // Load B tile into shared memory (warp-wide loading)
-        #pragma unroll
+
         for (int i = warp_id; i < TILE_SIZE; i += (BLOCK_DIM_Y / (WARP_SIZE / BLOCK_DIM_X))) {
             int rowB = t * TILE_SIZE + i;
             int colB = colTile + lane_id;
@@ -78,11 +78,11 @@ __global__ void matrixMulTiled(
         __syncthreads();  // Ensure both tiles are loaded
 
         // Compute partial products using warp tiling
-        #pragma unroll
+
         for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = Bs[k][lane_id];
 
-            #pragma unroll
+
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                 int rowIndex = ty + i * BLOCK_DIM_Y;
                 accum[i][0] += As[rowIndex][k] * bVal;
@@ -93,7 +93,6 @@ __global__ void matrixMulTiled(
     }
 
     // Write computed values to global memory
-    #pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         int rowC = rowTile + ty + i * BLOCK_DIM_Y;
         if (rowC < M && col < N)
