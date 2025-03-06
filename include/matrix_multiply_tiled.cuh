@@ -95,7 +95,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int TILE
 
 }
 
-inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K, int tileSize) {
+inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K, int TILE_SIZE) {
     float *d_A, *d_B, *d_C;
     float *h_A = new float[M * K];
     float *h_B = new float[K * N];
@@ -117,7 +117,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
 
     // Run kernel and measure performance
     auto result = measurePerformance([&]() {
-        switch (tileSize) {
+        switch (TILE_SIZE) {
             case 8:
                 blockSize = dim3(8, 32);  // Best config for TILE_SIZE = 8
                 matrixMulTiledOptimized<8, 8, 32><<<gridSize, blockSize>>>(d_A, d_B, d_C, M, N, K);
