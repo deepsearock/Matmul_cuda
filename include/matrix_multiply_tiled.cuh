@@ -26,7 +26,7 @@ __global__ void matrixMulTiled(
 {
     // Ensure TILE_SIZE is divisible by BLOCK_DIM_Y.
     const int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y;  // e.g., 64/16 = 4
-
+    
     // Block indices.
     int bx = blockIdx.x, by = blockIdx.y;
     // Thread indices.
@@ -119,9 +119,6 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
                 break;
             case 64:
                 matrixMulTiled<64, 4, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
-                break;
-            case 128:
-                matrixMulTiled<128, 2, 128><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
