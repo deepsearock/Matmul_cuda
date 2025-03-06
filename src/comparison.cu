@@ -12,7 +12,7 @@ void printUsage() {
     std::cout << "  <rowDimA>: Number of rows in matrix A and matrix C" << std::endl;
     std::cout << "  <colDimA>: Number of columns in matrix A (and number of rows in matrix B)" << std::endl;
     std::cout << "  <colDimB>: Number of columns in matrix B and matrix C" << std::endl;
-    std::cout << "  <gpu>: Select a GPU" << std::endl;
+    std::cout << "  <gpu>: Select a GPU (0-4)" << std::endl;
     exit(1);
 }
 
@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
 
     int tileSizes[] = {16, 32, 64};
     std::pair<int, int> blockConfigs[] = {{32, 8}, {16, 16}};
-
+    int block_height_tile = 0;
     for (int tileSize : tileSizes) {
         for (size_t i = 0; i < 2; i++) { // Fix structured bindings issue
             int blockWidth = blockConfigs[i].first;
@@ -58,9 +58,9 @@ int main(int argc, char *argv[]) {
             double avgNaiveFlops = totalNaiveFlops / 2;
             double avgTiledTime = totalTiledTime / 2;
             double avgTiledFlops = totalTiledFlops / 2;
-
+            block_height_tile = 256/tileSize;
             std::cout << "\nPerformance Results:" << std::endl;
-            std::cout << "Tile Block Size: tileSize^2 Tile Size: " << tileSize << std::endl;
+            std::cout << "Tile Block Size: "<< tileSize << "x" << block_height_tile << " Tile Size: " << tileSize << std::endl;
             std::cout << "Naive Block Size: " << blockWidth << "x" << blockHeight << std::endl;
             std::cout << "Naive Execution Time (ms): " << avgNaiveTime << std::endl;
             std::cout << "Tiled Execution Time (ms): " << avgTiledTime << std::endl;
