@@ -149,9 +149,6 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
-    dim3 blockDim(64, 4);
-    dim3 gridDim((N + 64 - 1) / 64, (M + 64 - 1) / 64);
-
     // Launch kernel using runtime-determined grid and block sizes
     dim3 blockDim(tileSize, 256 / tileSize);
     dim3 gridDim((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
