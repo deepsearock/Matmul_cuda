@@ -18,11 +18,7 @@
 #include <cstdint>
 
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE, int WARP_SIZE>
-__global__ void matrixMulTiled(
-    const float * __restrict__ A,
-    const float * __restrict__ B,
-    float * __restrict__ C,
-    int M, int N, int K)
+__global__ void matrixMulTiled(const float * __restrict__ A, const float * __restrict__ B, float * __restrict__ C, int M, int N, int K)
 {
     // Ensure TILE_SIZE is divisible by BLOCK_DIM_Y.
     constexpr int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y;
