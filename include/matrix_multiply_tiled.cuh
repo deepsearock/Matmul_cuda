@@ -73,9 +73,6 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
         case 32:
             cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<32>, 0, 0);
             break;
-        case 64:
-            cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, matrixMulTiled<64>, 0, 0);
-            break;
         default:
             std::cerr << "Unsupported tile size" << std::endl;
             exit(EXIT_FAILURE);
@@ -96,9 +93,6 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
                 break;
             case 32:
                 matrixMulTiled<32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
-                break;
-            case 64:
-                matrixMulTiled<64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
