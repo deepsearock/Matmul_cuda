@@ -26,7 +26,7 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         int tiledRowB = tileIdx * TILE_SIZE + threadIdx.y;
 
         // Load global memory into shared memory using row-stripe loading
-        for (int i = 0; i < TILE_SIZE; i += WARP_SIZE) {
+        for (int i = 0; i < TILE_SIZE; i += 32) {
             if (row + i < M && tiledColA < K) {
                 tileA[threadIdx.y + i][threadIdx.x] = A[(row + i) * K + tiledColA];
             } else {
