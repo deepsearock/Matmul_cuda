@@ -66,8 +66,6 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int TILE
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
     dim3 blockSize;
     dim3 gridSize((N + TILE_SIZE - 1) / TILE_SIZE, (M + TILE_SIZE - 1) / TILE_SIZE);
-    // launch kernel
-    dim3 blockSize, gridSize((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
 
     // Run kernel and measure performance
     auto result = measurePerformance([&]() {
@@ -114,8 +112,6 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     // Launch the kernel
     dim3 blockSize;
     dim3 gridSize((N + TILE_SIZE - 1) / TILE_SIZE, (M + TILE_SIZE - 1) / TILE_SIZE);
-    // launch kernel
-    dim3 blockSize, gridSize((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
 
     // Run kernel and measure performance
     auto result = measurePerformance([&]() {
