@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
     std::cout << "  C (" << rowDimA << "x" << colDimB << ")" << std::endl;
 
     int tileSizes[] = {8, 16, 32};
-    std::pair<int, int> blockConfigs[] = {{8, 32}, {32, 8}};
+    std::pair<int, int> blockConfigs[] = {{32, 32}, {16, 16}};
 
     for (int tileSize : tileSizes) {
         for (size_t i = 0; i < 2; i++) { // Fix structured bindings issue
