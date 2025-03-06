@@ -12,25 +12,29 @@
 // Tiled CUDA kernel for matrix multiplication using shared memory
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K) {
-    // Each thread computes multiple (vertical) output elements.
-    // Here, each thread computes TILE_SIZE / blockDim.y outputs.
-    const int numRowsPerThread = TILE_SIZE / blockDim.y; // = 4 when blockDim.y == 8
+    // Compute how many rows each thread in the block will compute.
+    // Since blockDim.y is determined at kernel launch, this is computed at runtime.
+    int numRowsPerThread = (TILE_SIZE + blockDim.y - 1) / blockDim.y;
 
-    // Compute the output column (all threads share the same col index)
+    // Allocate a local (register) array of size TILE_SIZE (which is a compile-time constant).
+    // We'll only use the first numRowsPerThread entries.
+    float sum[TILE_SIZE];
+    for (int i = 0; i < numRowsPerThread; i++) {
+        sum[i] = 0.0f;
+    }
+
+    // Compute the column index in the output matrix.
     int col = blockIdx.x * TILE_SIZE + threadIdx.x;
 
     // Declare shared memory tiles for A and B.
     __shared__ float tileA[TILE_SIZE][TILE_SIZE];
     __shared__ float tileB[TILE_SIZE][TILE_SIZE];
 
-    // Each thread holds partial sums for its micro-tile (4 output elements)
-    float sum[numRowsPerThread] = {0.0f};
-
-    // Loop over all tiles required to cover the K dimension.
+    // Determine how many tiles are needed in the K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
-    for (int tileIdx = 0; tileIdx < numTiles; ++tileIdx) {
+    for (int tileIdx = 0; tileIdx < numTiles; tileIdx++) {
         // --- Load tileA ---
-        // Each thread loads multiple rows of the tile.
+        // Each thread loads multiple rows from A into the shared tile.
         for (int i = threadIdx.y; i < TILE_SIZE; i += blockDim.y) {
             int rowA = blockIdx.y * TILE_SIZE + i;
             int colA = tileIdx * TILE_SIZE + threadIdx.x;
@@ -41,36 +45,37 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         }
 
         // --- Load tileB ---
-        // Similarly, load multiple rows of tileB.
+        // Similarly, each thread loads multiple rows from B into the shared tile.
         for (int i = threadIdx.y; i < TILE_SIZE; i += blockDim.y) {
             int rowB = tileIdx * TILE_SIZE + i;
-            int colB = col;  // since threadIdx.x gives the column index within the tile
+            int colB = col;
             if (rowB < K && colB < N)
                 tileB[i][threadIdx.x] = B[rowB * N + colB];
             else
                 tileB[i][threadIdx.x] = 0.0f;
         }
 
+        // Ensure all threads have loaded the tiles.
         __syncthreads();
 
         // --- Compute partial sums ---
-        // Each thread uses the loaded tiles to update its micro-tile results.
-        // The inner loop runs over the shared tile's width.
+        // Each thread computes numRowsPerThread output rows.
         for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = tileB[k][threadIdx.x];
-            // Each thread computes 4 different output rows.
             for (int i = 0; i < numRowsPerThread; i++) {
-                // Calculate the corresponding row within the tile.
+                // Compute the row within the tile for this thread.
                 int rowIndex = threadIdx.y + i * blockDim.y;
-                sum[i] += tileA[rowIndex][k] * bVal;
+                // Extra guard: rowIndex should be less than TILE_SIZE.
+                if (rowIndex < TILE_SIZE)
+                    sum[i] += tileA[rowIndex][k] * bVal;
             }
         }
 
+        // Synchronize to ensure computation is complete before loading new tiles.
         __syncthreads();
     }
 
     // --- Write results to global memory ---
-    // Each thread writes out its computed micro-tile elements.
     for (int i = 0; i < numRowsPerThread; i++) {
         int row = blockIdx.y * TILE_SIZE + threadIdx.y + i * blockDim.y;
         if (row < M && col < N) {
@@ -78,16 +83,6 @@ __global__ void matrixMulTiled(float *A, float *B, float *C, int M, int N, int K
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
 
 // wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
