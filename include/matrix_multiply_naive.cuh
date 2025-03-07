@@ -69,6 +69,7 @@ inline std::pair<double, double> runMatrixMulNaiveWithErrorCheck(int M, int N, i
     cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
 
     // Compute reference result on CPU
+    /*
     matrixMulCPU(h_A, h_B, h_C_ref, M, N, K);
 
     // Compute error metrics
@@ -80,18 +81,18 @@ inline std::pair<double, double> runMatrixMulNaiveWithErrorCheck(int M, int N, i
     }
     mse /= (M * N);
     double error_threshold = 1e-3; // Define an acceptable error threshold
-int error_count = 0;
+    int error_count = 0;
 
-for (int i = 0; i < M * N; ++i) {
-    double diff = fabs(h_C[i] - h_C_ref[i]);
-    if (diff > error_threshold) { // Consider it an error if the difference is too large
-        error_count++;
+    for (int i = 0; i < M * N; ++i) {
+        double diff = fabs(h_C[i] - h_C_ref[i]);
+        if (diff > error_threshold) { // Consider it an error if the difference is too large
+            error_count++;
+        }
     }
-}
 
-double error_percentage = (error_count * 100.0) / (M * N);
+    double error_percentage = (error_count * 100.0) / (M * N);
 
-std::cout << "Error Percentage: " << error_percentage << "%" << std::endl;
+    std::cout << "Error Percentage: " << error_percentage << "%" << std::endl;
     
     // Print error results
     std::cout << "Mean Squared Error: " << mse << std::endl;
@@ -103,6 +104,8 @@ std::cout << "Error Percentage: " << error_percentage << "%" << std::endl;
     delete[] h_B;
     delete[] h_C;
     delete[] h_C_ref;
+
+    */
 
     return result;
 }

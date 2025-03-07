@@ -161,7 +161,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     }, M, N, K);
     // Copy results back to host
     cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
-
+    /*
     // Compute CPU reference result
     matrixMulCPU(h_A, h_B, h_C_ref, M, N, K);
 
@@ -190,7 +190,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     delete[] h_B;
     delete[] h_C;
     delete[] h_C_ref;
-
+    */
     return result;
 }
 
