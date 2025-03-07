@@ -18,7 +18,6 @@
 #include <cstdint>
 
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
-template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
 __global__ void matrixMulTiled(
     const float * __restrict__ A,
     const float * __restrict__ B,
