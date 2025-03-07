@@ -8,7 +8,7 @@
 #include "utils.cuh"
 
 void printUsage() {
-    std::cout << "Usage: TiledMatrixMul -i <rowDimA> <colDimA> <colDimB> <gpu>" << std::endl;
+    std::cout << "Usage: "<< argv[0] << " -i <rowDimA> <colDimA> <colDimB> <gpu>" << std::endl;
     std::cout << "  <rowDimA>: Number of rows in matrix A and matrix C" << std::endl;
     std::cout << "  <colDimA>: Number of columns in matrix A (and number of rows in matrix B)" << std::endl;
     std::cout << "  <colDimB>: Number of columns in matrix B and matrix C" << std::endl;

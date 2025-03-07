@@ -11,13 +11,14 @@
 
 #define checkCudaErrors(val) checkCuda((val), #val, __FILE__, __LINE__)
 
+//unused not very useful for me
 __device__ inline uint32_t toGlobalAddr(const void *ptr) {
-    // Convert a generic pointer to a 32-bit global address.
-    // This works if your global memory pointers are in the low 4GB.
+    //convert a generic pointer to a 32-bit global address.
+    //this works if your global memory pointers are in the low 4GB.
     return (uint32_t)__cvta_generic_to_global(ptr);
 }
 
-// unused could do random 0.0 to 1.0
+//unused could do random 0.0 to 1.0
 void populateMatrix(float *matrix, int rows, int cols) {
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -28,7 +29,7 @@ void populateMatrix(float *matrix, int rows, int cols) {
     }
 }
 
-// error checking for cuda i see this a lot
+//error checking for cuda i see this a lot
 inline void checkCuda(cudaError_t result, const char *const func, const char *const file, int const line) {
     if (result != cudaSuccess) {
         std::cerr << "CUDA error at " << file << ":" << line << " in " << func << " (" << cudaGetErrorString(result) << ")\n";
@@ -36,7 +37,7 @@ inline void checkCuda(cudaError_t result, const char *const func, const char *co
     }
 }
 
-
+//helper matrixmulcpu
 void matrixMulCPU(const float* A, const float* B, float* C, int M, int N, int K) {
     for (int i = 0; i < M; ++i) {
         for (int j = 0; j < N; ++j) {
@@ -49,7 +50,7 @@ void matrixMulCPU(const float* A, const float* B, float* C, int M, int N, int K)
     }
 }
 
-// print to terminal gpu specs
+//print to terminal gpu specs
 void printGpuSpecs() {
     cudaDeviceProp mygpu;
     cudaGetDeviceProperties(&mygpu, 0);
@@ -65,7 +66,7 @@ void printGpuSpecs() {
     std::cout << "  Shared Memory per Block(KB): " << mygpu.sharedMemPerBlock/1024 << std::endl;
 }
 
-
+//select gpu
 void gpuselect(int device) {
     int deviceCount;
     cudaGetDeviceCount(&deviceCount);
@@ -82,14 +83,13 @@ void gpuselect(int device) {
                   << prop.major << "." << prop.minor << ")\n";
     }
 
-    // Select GPU
-    int selectedDevice = device;  // Change this value if needed
+    int selectedDevice = device;
     cudaSetDevice(selectedDevice);
     cudaGetDeviceProperties(&prop, selectedDevice);
     std::cout << "Using GPU " << selectedDevice << ": " << prop.name << "\n";
 }
 
-// memory allocation function on gpu
+//memory allocation function on gpu
 inline void allocateDeviceMemory(float **d_A, float **d_B, float **d_C, int M, int N, int K) {
     cudaFree(0);
     checkCudaErrors(cudaMalloc((void**)d_A, M * K * sizeof(float)));
@@ -97,19 +97,19 @@ inline void allocateDeviceMemory(float **d_A, float **d_B, float **d_C, int M, i
     checkCudaErrors(cudaMalloc((void**)d_C, M * N * sizeof(float)));
 }
 
-// function to free memory on gpu
+//function to free memory on gpu
 inline void freeDeviceMemory(float *d_A, float *d_B, float *d_C) {
     checkCudaErrors(cudaFree(d_A));
     checkCudaErrors(cudaFree(d_B));
     checkCudaErrors(cudaFree(d_C));
 }
 
-// performance function mainly calcs tflops
+//performance function mainly calcs tflops
 inline std::pair<double, double> measurePerformance(std::function<void()> kernelLaunch, int M, int N, int K) {
     cudaEvent_t start, stop;
     float timeMs = 0.0f;
 
-    // create some cuda events
+    //create some cuda events
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
@@ -119,16 +119,16 @@ inline std::pair<double, double> measurePerformance(std::function<void()> kernel
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
 
-    // calculate the elapsed time
+    //calculate the elapsed time
     cudaEventElapsedTime(&timeMs, start, stop);
 
-    // destroy the events
+    //destroy the events
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 
-    // tflops calc
+    //tflops calc
     double numOps = 2.0 * M * N * K;
-    double tflops = (numOps / (timeMs * 1e9));  // Convert to TFLOPS (1e6 for milliseconds)
+    double tflops = (numOps / (timeMs * 1e9));
 
     return {tflops, timeMs};
 }
