@@ -45,8 +45,10 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
     // Iterate over tiles.
+    #pragma unroll
     for (int t = 0; t < numTiles; t++) {
         // Load A tile into shared memory.
+        #pragma unroll
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
             int colA = t * TILE_SIZE + tx;
@@ -57,6 +59,7 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
         }
 
         // Load B tile into shared memory (using warp-wide memory coalescing).
+        #pragma unroll
         for (int i = ty; i < TILE_SIZE; i += BLOCK_DIM_Y) {
             int rowB = t * TILE_SIZE + i;
             int colB = colTile + tx;
@@ -69,10 +72,11 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
         __syncthreads();  // Ensure both tiles are loaded.
 
         // Compute partial products using warp-level tiling.
+        #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = Bs[k][tx];
 
-
+            #pragma unroll
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                 int rowIndex = ty + i * BLOCK_DIM_Y;
                 accum[i] = __fmaf_rn(As[rowIndex][k], bVal, accum[i]);
@@ -83,7 +87,7 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
     }
 
     // Write the computed values back to global memory.
-
+    #pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         int rowC = rowTile + ty + i * BLOCK_DIM_Y;
         if (rowC < M && col < N)
@@ -134,7 +138,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     delete[] h_B;
     delete[] h_C;
     delete[] h_C_ref;
-    
+
     return result;
 }
 

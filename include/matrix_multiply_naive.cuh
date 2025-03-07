@@ -19,6 +19,7 @@ __global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N,
     // check if they are multiples of block
     if (row < M && col < N) {
         float sum = 0.0f;
+        #pragma unroll
         for (int k = 0; k < K; ++k) {
             sum += A[row * K + k] * B[k * N + col];
         }
