@@ -38,8 +38,8 @@ int main(int argc, char *argv[]) {
     int block_height_tile = 0;
     for (int tileSize : tileSizes) {
          // Fix structured bindings issue
-        int blockWidth = blockConfigs[i].first;
-        int blockHeight = blockConfigs[i].second;
+        int blockWidth = blockConfigs[tileSize].first;
+        int blockHeight = blockConfigs[tileSize].second;
 
         double totalNaiveTime = 0.0, totalNaiveFlops = 0.0;
         double totalTiledTime = 0.0, totalTiledFlops = 0.0;
