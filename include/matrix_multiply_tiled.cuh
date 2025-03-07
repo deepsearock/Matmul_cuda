@@ -54,17 +54,6 @@ __global__ void matrixMulTiled(
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
     // Loop over tiles.
-    for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-        accum[i] = 0.0f;
-    }
-
-    // Shared memory for the A and B tiles.
-    __shared__ float As[TILE_SIZE][TILE_SIZE];
-    __shared__ float Bs[TILE_SIZE][TILE_SIZE+1];  // Padding reduces bank conflicts.
-
-    // Total number of tiles along K.
-    int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
-
     for (int t = 0; t < numTiles; t++) {
         // Compute effective tile width for A and effective tile height for B.
         int effectiveTileK = (t * TILE_SIZE + TILE_SIZE <= K) ? TILE_SIZE : (K - t * TILE_SIZE);
