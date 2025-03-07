@@ -18,7 +18,7 @@
 #include <cstdint>
 
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
-__global__ void matrixMulTiled(
+__global__ void matrixMulTiledDoubleBuffered(
     const float * __restrict__ A,
     const float * __restrict__ B,
     float * __restrict__ C,
@@ -35,7 +35,7 @@ __global__ void matrixMulTiled(
     // Compute starting coordinates for the output tile in C.
     int rowTile = by * TILE_SIZE;
     int colTile = bx * TILE_SIZE;
-    // Each thread is responsible for one output column.
+    // Each thread writes to one output column.
     int col = colTile + tx;
 
     // Each thread accumulates MICRO_TILE_ROWS results in registers.
@@ -45,111 +45,90 @@ __global__ void matrixMulTiled(
         accum[i] = 0.0f;
     }
 
-    // Flatten shared memory arrays for A and B tiles.
-    __shared__ float As[TILE_SIZE * TILE_SIZE];
-    __shared__ float Bs[TILE_SIZE * TILE_SIZE];
+    // Use double-buffered shared memory for tiles.
+    // Two buffers for A and two for B.
+    __shared__ float As[2][TILE_SIZE][TILE_SIZE];
+    __shared__ float Bs[2][TILE_SIZE][TILE_SIZE];
 
-    // Number of tiles along the K dimension.
+    // Determine number of tiles along the K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
+    int currentBuffer = 0;  // index of the buffer currently used for computation
 
-    // For vectorized loads with float4, determine how many full groups of 4 exist
-    int numVecLoadsPerRow = TILE_SIZE / 4;   // full groups of 4 elements
-    int remainder = TILE_SIZE % 4;             // extra elements that don’t form a full float4
+    // Preload the first tile into the current buffer if available.
+    if (numTiles > 0) {
+        int t = 0;
+        // Load A tile into As[currentBuffer].
+        for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+            int rowA = rowTile + ty + i * BLOCK_DIM_Y;
+            int colA = t * TILE_SIZE + tx;
+            if (rowA < M && colA < K)
+                As[currentBuffer][ty + i * BLOCK_DIM_Y][tx] = A[rowA * K + colA];
+            else
+                As[currentBuffer][ty + i * BLOCK_DIM_Y][tx] = 0.0f;
+        }
+        // Load B tile into Bs[currentBuffer].
+        for (int i = ty; i < TILE_SIZE; i += BLOCK_DIM_Y) {
+            int rowB = t * TILE_SIZE + i;
+            int colB = colTile + tx;
+            if (rowB < K && colB < N)
+                Bs[currentBuffer][i][tx] = B[rowB * N + colB];
+            else
+                Bs[currentBuffer][i][tx] = 0.0f;
+        }
+    }
+    __syncthreads();
 
-    // Loop over tiles.
+    // Loop over all tiles.
     for (int t = 0; t < numTiles; t++) {
-        // --- Load A tile into shared memory.
-        for (int r = ty; r < TILE_SIZE; r += BLOCK_DIM_Y) {
-            int globalRow = rowTile + r;
-            const float* rowPtr = A + globalRow * K + t * TILE_SIZE;
-            const float4* vecRowPtr = reinterpret_cast<const float4*>(rowPtr);
-            // Vectorized load portion.
-            for (int c = tx; c < numVecLoadsPerRow; c += BLOCK_DIM_X) {
-                float4 data;
-                int globalCol = t * TILE_SIZE + c * 4;
-                if (globalRow < M && (globalCol + 3) < K) {
-                    data = vecRowPtr[c];
-                } else {
-                    // For boundary cases, load element-by-element.
-                    float tmp[4];
-                    for (int j = 0; j < 4; j++) {
-                        int colIdx = t * TILE_SIZE + c * 4 + j;
-                        tmp[j] = (globalRow < M && colIdx < K) ? A[globalRow * K + colIdx] : 0.0f;
-                    }
-                    data = make_float4(tmp[0], tmp[1], tmp[2], tmp[3]);
-                }
-                int shIndex = r * TILE_SIZE + c * 4;
-                As[shIndex + 0] = data.x;
-                As[shIndex + 1] = data.y;
-                As[shIndex + 2] = data.z;
-                As[shIndex + 3] = data.w;
+        int nextTile = t + 1;
+        int nextBuffer = currentBuffer ^ 1;  // alternate buffer index (0 <-> 1)
+
+        // If there’s another tile, preload it into the alternate buffer.
+        if (nextTile < numTiles) {
+            // Load next tile of A.
+            for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+                int rowA = rowTile + ty + i * BLOCK_DIM_Y;
+                int colA = nextTile * TILE_SIZE + tx;
+                if (rowA < M && colA < K)
+                    As[nextBuffer][ty + i * BLOCK_DIM_Y][tx] = A[rowA * K + colA];
+                else
+                    As[nextBuffer][ty + i * BLOCK_DIM_Y][tx] = 0.0f;
             }
-            // Remainder: load leftover elements in this row.
-            int remStart = numVecLoadsPerRow * 4;
-            for (int c = remStart + tx; c < TILE_SIZE; c += BLOCK_DIM_X) {
-                int globalCol = t * TILE_SIZE + c;
-                float value = (globalRow < M && globalCol < K) ? A[globalRow * K + globalCol] : 0.0f;
-                As[r * TILE_SIZE + c] = value;
+            // Load next tile of B.
+            for (int i = ty; i < TILE_SIZE; i += BLOCK_DIM_Y) {
+                int rowB = nextTile * TILE_SIZE + i;
+                int colB = colTile + tx;
+                if (rowB < K && colB < N)
+                    Bs[nextBuffer][i][tx] = B[rowB * N + colB];
+                else
+                    Bs[nextBuffer][i][tx] = 0.0f;
             }
         }
+        __syncthreads();
 
-        // --- Load B tile into shared memory.
-        for (int r = ty; r < TILE_SIZE; r += BLOCK_DIM_Y) {
-            int globalRow = t * TILE_SIZE + r;
-            const float* rowPtr = B + globalRow * N + colTile;
-            const float4* vecRowPtr = reinterpret_cast<const float4*>(rowPtr);
-            // Vectorized load.
-            for (int c = tx; c < numVecLoadsPerRow; c += BLOCK_DIM_X) {
-                float4 data;
-                int globalCol = colTile + c * 4;
-                if (globalRow < K && (globalCol + 3) < N) {
-                    data = vecRowPtr[c];
-                } else {
-                    float tmp[4];
-                    for (int j = 0; j < 4; j++) {
-                        int colIdx = colTile + c * 4 + j;
-                        tmp[j] = (globalRow < K && colIdx < N) ? B[globalRow * N + colIdx] : 0.0f;
-                    }
-                    data = make_float4(tmp[0], tmp[1], tmp[2], tmp[3]);
-                }
-                int shIndex = r * TILE_SIZE + c * 4;
-                Bs[shIndex + 0] = data.x;
-                Bs[shIndex + 1] = data.y;
-                Bs[shIndex + 2] = data.z;
-                Bs[shIndex + 3] = data.w;
-            }
-            // Remainder portion for B.
-            int remStart = numVecLoadsPerRow * 4;
-            for (int c = remStart + tx; c < TILE_SIZE; c += BLOCK_DIM_X) {
-                int globalCol = colTile + c;
-                float value = (globalRow < K && globalCol < N) ? B[globalRow * N + globalCol] : 0.0f;
-                Bs[r * TILE_SIZE + c] = value;
-            }
-        }
-
-        __syncthreads();  // Ensure the entire tile is loaded.
-
-        // --- Compute partial products.
+        // --- Compute partial products using the tile in currentBuffer.
+#pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
-            float bVal = Bs[k * TILE_SIZE + tx];  // Bs[row k, column tx]
+            float bVal = Bs[currentBuffer][k][tx];  // each thread reads one element of B’s row
+#pragma unroll
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                 int rowIndex = ty + i * BLOCK_DIM_Y;
-                accum[i] += As[rowIndex * TILE_SIZE + k] * bVal;
+                accum[i] += As[currentBuffer][rowIndex][k] * bVal;
             }
         }
 
-        __syncthreads();  // Wait before loading the next tile.
+        // Swap buffers for the next iteration.
+        currentBuffer ^= 1;
+        __syncthreads();
     }
 
-    // --- Write the computed micro‑tile back to global memory.
+    // Write the computed micro‑tile back to global memory.
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         int rowC = rowTile + ty + i * BLOCK_DIM_Y;
         if (rowC < M && col < N)
             C[rowC * N + col] = accum[i];
     }
 }
-
-
 
 // wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
