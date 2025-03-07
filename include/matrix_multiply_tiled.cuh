@@ -17,45 +17,36 @@
 #include <cuda_pipeline.h>  // May be required for __cp_async intrinsics.
 #include <cstdint>
 
-#define WARP_SIZE 32
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
-__global__ void matrixMulTiled(
-    const float * __restrict__ A,
-    const float * __restrict__ B,
-    float * __restrict__ C,
-    int M, int N, int K)
+__global__ void matrixMulTiled(const float * __restrict__ A, const float * __restrict__ B, float * __restrict__ C, int M, int N, int K)
 {
-    // Ensure TILE_SIZE is divisible by WARP_SIZE for efficient tiling.
+    // Ensure TILE_SIZE is divisible by BLOCK_DIM_Y.
     constexpr int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y;
-    constexpr int MICRO_TILE_COLS = TILE_SIZE / BLOCK_DIM_X;
 
-    // Block and thread indices
+    // Block and thread indices.
     int bx = blockIdx.x, by = blockIdx.y;
     int tx = threadIdx.x, ty = threadIdx.y;
 
-    // Warp-level indices
-    int warp_id = (ty / (WARP_SIZE / BLOCK_DIM_X));  // Warp row index
-    int lane_id = tx;  // Lane within the warp
-
-    // Compute tile location
+    // Compute starting tile location.
     int rowTile = by * TILE_SIZE;
     int colTile = bx * TILE_SIZE;
+
+    // Compute output column each thread is responsible for.
     int col = colTile + tx;
 
-    // Registers for accumulation (per thread)
-    float accum[MICRO_TILE_ROWS][MICRO_TILE_COLS] = {0.0f};
+    // Use registers for accumulation.
+    float accum[MICRO_TILE_ROWS] = {0.0f};
 
-    // Shared memory tiles
+    // Shared memory tiles.
     __shared__ float As[TILE_SIZE][TILE_SIZE];
-    __shared__ float Bs[TILE_SIZE][TILE_SIZE];  // Padding for bank conflicts
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];  // Padding to avoid bank conflicts.
 
-    // Number of tiles in K dimension
+    // Number of tiles in K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
-    // Iterate over tiles
+    // Iterate over tiles.
     for (int t = 0; t < numTiles; t++) {
-        // Load A tile into shared memory with warp-wide coalesced access
-
+        // Load A tile into shared memory.
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
             int colA = t * TILE_SIZE + tx;
@@ -65,45 +56,41 @@ __global__ void matrixMulTiled(
                 As[ty + i * BLOCK_DIM_Y][tx] = 0.0f;
         }
 
-        // Load B tile into shared memory (warp-wide loading)
-
-        for (int i = warp_id; i < TILE_SIZE; i += (BLOCK_DIM_Y / (WARP_SIZE / BLOCK_DIM_X))) {
+        // Load B tile into shared memory (using warp-wide memory coalescing).
+        for (int i = ty; i < TILE_SIZE; i += BLOCK_DIM_Y) {
             int rowB = t * TILE_SIZE + i;
-            int colB = colTile + lane_id;
+            int colB = colTile + tx;
             if (rowB < K && colB < N)
-                Bs[i][lane_id] = B[rowB * N + colB];
+                Bs[i][tx] = B[rowB * N + colB];
             else
-                Bs[i][lane_id] = 0.0f;
+                Bs[i][tx] = 0.0f;
         }
 
-        __syncthreads();  // Ensure both tiles are loaded
+        __syncthreads();  // Ensure both tiles are loaded.
 
-        // Compute partial products using warp tiling
-
+        // Compute partial products using warp-level tiling.
         for (int k = 0; k < TILE_SIZE; k++) {
-            float bVal = Bs[k][lane_id];
+            float bVal = Bs[k][tx];
+
+
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                 int rowIndex = ty + i * BLOCK_DIM_Y;
-                for (int j = 0; j < MICRO_TILE_COLS; j++) {
-                    // Map j to an appropriate index in shared memory for B or adjust your logic accordingly.
-                    int colIndex = tx * MICRO_TILE_COLS + j;
-                    accum[i][j] = __fmaf_rn(As[rowIndex][k], Bs[k][colIndex], accum[i][j]);
-                }
+                accum[i] = __fmaf_rn(As[rowIndex][k], bVal, accum[i]);
             }
         }
-        __syncthreads();  // Wait before loading the next tile
+
+        __syncthreads();  // Wait before loading the next tile.
     }
 
-    // Write computed values to global memory
+    // Write the computed values back to global memory.
+
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-        for (int j = 0; j < MICRO_TILE_COLS; j++) {
-            int globalRow = rowTile + ty * MICRO_TILE_ROWS + i;
-            int globalCol = colTile + tx * MICRO_TILE_COLS + j;
-            if (globalRow < M && globalCol < N)
-                C[globalRow * N + globalCol] = accum[i][j];
-        }
+        int rowC = rowTile + ty + i * BLOCK_DIM_Y;
+        if (rowC < M && col < N)
+            C[rowC * N + col] = accum[i];
     }
 }
+
 
 
 // wrapper function that measures performance and does memory management
