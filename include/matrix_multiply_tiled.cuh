@@ -161,13 +161,13 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     auto result = measurePerformance([&]() {
         switch (tileSize) {
             case 16:
-                matrixMulTiled<16, 16, 16, 8, 4><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<16, 16, 16, 4, 8><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<32, 8, 32, 8, 4><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32, 8, 32, 4, 8><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 64:
-                matrixMulTiled<64, 4, 64, 8, 4><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<64, 4, 64, 4, 8><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
