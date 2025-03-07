@@ -11,7 +11,7 @@ int main() {
     int N = 1567;  // Number of columns in B and C
     int K = 2467;  // Number of columns in A and rows in B
 
-    int tileSize = 64;  // Tile size for tiled matrix multiplication
+    int tileSize = 32;  // Tile size for tiled matrix multiplication
 
     printGpuSpecs();
     gpuselect(4);
