@@ -57,12 +57,12 @@ __global__ void matrixMulTiled(
 
     // Each warp is assigned a sub-tile of the block tile.
     // Here we assume the block tile is evenly subdivided among the warps.
-    int warpTileRows = TILE_SIZE / (BLOCK_DIM_Y / WARP_DIM_Y);
-    int warpTileCols = TILE_SIZE / (BLOCK_DIM_X / WARP_DIM_X);
+    constexpr int warpTileRows = TILE_SIZE / (BLOCK_DIM_Y / WARP_DIM_Y);
+    constexpr int warpTileCols = TILE_SIZE / (BLOCK_DIM_X / WARP_DIM_X);
 
     // Within each warp, each thread computes a micro-tile.
-    int microTileRows = warpTileRows / WARP_DIM_Y;
-    int microTileCols = warpTileCols / WARP_DIM_X;
+    constexpr int microTileRows = warpTileRows / WARP_DIM_Y;
+    constexpr int microTileCols = warpTileCols / WARP_DIM_X;
 
     // Compute the starting global coordinate for this warp’s tile.
     int warpTileRowStart = rowTile + warpRowIdx * warpTileRows;
