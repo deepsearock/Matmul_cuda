@@ -16,16 +16,38 @@ void matrixMultiplyCUBLAS(float* A, float* B, float* C, int M, int N, int K) {
     cudaMalloc((void**)&d_B, N * K * sizeof(float));
     cudaMalloc((void**)&d_C, M * K * sizeof(float));
 
+    float *h_A = new float[M * K];
+    float *h_B = new float[K * N];
+    float *h_C = new float[M * N];
+    float *h_C_ref = new float[M * N];
+
+    //initialize host memory with random values
+    for (int i = 0; i < M * K; ++i) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
+    for (int i = 0; i < K * N; ++i) h_B[i] = static_cast<float>(rand()) / RAND_MAX;
+
+    //allocate and copy memory to device
+    cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
+
     cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, K, M, N, &alpha, d_B, K, d_A, N,  &beta, d_C, K);
     
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
+
+    //copy results back to host
+    cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    delete[] h_A;
+    delete[] h_B;
+    delete[] h_C;
+    delete[] h_C_ref;
+
     cublasDestroy(handle);
 }
 
 
-// quick cublas implementation to check for performance
+//quick cublas implementation to check for performance
 int main(int argc, char* argv[]) {
 
     if (argc != 5 || std::string(argv[1]) != "-i") {
