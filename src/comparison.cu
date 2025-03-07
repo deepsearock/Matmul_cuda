@@ -37,36 +37,36 @@ int main(int argc, char *argv[]) {
     std::pair<int, int> blockConfigs[] = {{16, 16}, {32, 8}, {64, 4}};
     int block_height_tile = 0;
     for (int tileSize : tileSizes) {
-        for (size_t i = 0; i < 2; i++) { // Fix structured bindings issue
-            int blockWidth = blockConfigs[i].first;
-            int blockHeight = blockConfigs[i].second;
+         // Fix structured bindings issue
+        int blockWidth = blockConfigs[i].first;
+        int blockHeight = blockConfigs[i].second;
 
-            double totalNaiveTime = 0.0, totalNaiveFlops = 0.0;
-            double totalTiledTime = 0.0, totalTiledFlops = 0.0;
+        double totalNaiveTime = 0.0, totalNaiveFlops = 0.0;
+        double totalTiledTime = 0.0, totalTiledFlops = 0.0;
 
-            for (int run = 0; run < 2; ++run) {
-                auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, blockWidth, blockHeight);
-                totalNaiveTime += naiveResult.second;
-                totalNaiveFlops += naiveResult.first;
+        for (int run = 0; run < 2; ++run) {
+            auto naiveResult = runMatrixMulNaive(rowDimA, colDimB, colDimA, blockWidth, blockHeight);
+            totalNaiveTime += naiveResult.second;
+            totalNaiveFlops += naiveResult.first;
 
-                std::pair<double, double> tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
-                totalTiledTime += tiledResult.second;
-                totalTiledFlops += tiledResult.first;
-            }
-
-            double avgNaiveTime = totalNaiveTime / 2;
-            double avgNaiveFlops = totalNaiveFlops / 2;
-            double avgTiledTime = totalTiledTime / 2;
-            double avgTiledFlops = totalTiledFlops / 2;
-            block_height_tile = 256/tileSize;
-            std::cout << "\nPerformance Results:" << std::endl;
-            std::cout << "Tile Block Size: "<< tileSize << "x" << block_height_tile << " Tile Size: " << tileSize << std::endl;
-            std::cout << "Naive Block Size: " << blockWidth << "x" << blockHeight << std::endl;
-            std::cout << "Naive Execution Time (ms): " << avgNaiveTime << std::endl;
-            std::cout << "Tiled Execution Time (ms): " << avgTiledTime << std::endl;
-            std::cout << "Naive Performance (TFLOPS): " << avgNaiveFlops << std::endl;
-            std::cout << "Tiled Performance (TFLOPS): " << avgTiledFlops << std::endl;
+            std::pair<double, double> tiledResult = runMatrixMulTiled(rowDimA, colDimB, colDimA, tileSize);
+            totalTiledTime += tiledResult.second;
+            totalTiledFlops += tiledResult.first;
         }
+
+        double avgNaiveTime = totalNaiveTime / 2;
+        double avgNaiveFlops = totalNaiveFlops / 2;
+        double avgTiledTime = totalTiledTime / 2;
+        double avgTiledFlops = totalTiledFlops / 2;
+        block_height_tile = 256/tileSize;
+        std::cout << "\nPerformance Results:" << std::endl;
+        std::cout << "Tile Block Size: "<< tileSize << "x" << block_height_tile << " Tile Size: " << tileSize << std::endl;
+        std::cout << "Naive Block Size: " << blockWidth << "x" << blockHeight << std::endl;
+        std::cout << "Naive Execution Time (ms): " << avgNaiveTime << std::endl;
+        std::cout << "Tiled Execution Time (ms): " << avgTiledTime << std::endl;
+        std::cout << "Naive Performance (TFLOPS): " << avgNaiveFlops << std::endl;
+        std::cout << "Tiled Performance (TFLOPS): " << avgTiledFlops << std::endl;
+        
     }
     
     return 0;
