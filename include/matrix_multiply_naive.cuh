@@ -47,7 +47,7 @@ inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K, int bloc
     dim3 blockDim(blockWidth, blockHeight, 1);
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y, 1);
 
-    auto result = measurePerformance([&]() { matrixMulGlobalNaive<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K); }, M, N, K);
+    auto result = measurePerformance([&]() { matrixMulGlobalNaive<<<gridDim, blockDim>>>(M, N, K); }, M, N, K);
     
     cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
     freeDeviceMemory(d_A, d_B, d_C);
@@ -80,7 +80,7 @@ inline std::pair<double, double> runMatrixMulNaiveWithErrorCheck(int M, int N, i
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
 
     // Launch kernel and measure performance
-    auto result = measurePerformance([&]() { matrixMulGlobalNaive<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K); }, M, N, K);
+    auto result = measurePerformance([&]() { matrixMulGlobalNaive<<<gridDim, blockDim>>>(M, N, K); }, M, N, K);
 
     // Copy results back to host
     cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
