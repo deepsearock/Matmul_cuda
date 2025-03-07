@@ -26,7 +26,7 @@ __global__ void matrixMulTiled(
 {
     // Ensure TILE_SIZE is divisible by BLOCK_DIM_Y.
     const int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y;  // e.g., 64/16 = 4
-
+    
     // Block indices.
     int bx = blockIdx.x, by = blockIdx.y;
     // Thread indices.
@@ -35,91 +35,60 @@ __global__ void matrixMulTiled(
     // Compute starting coordinates for the output tile in C.
     int rowTile = by * TILE_SIZE;
     int colTile = bx * TILE_SIZE;
-    // Each thread writes to one output column.
+    // With blockDim.x = TILE_SIZE, each thread covers one column of the tile.
     int col = colTile + tx;
 
     // Each thread accumulates MICRO_TILE_ROWS results in registers.
     float accum[MICRO_TILE_ROWS];
-#pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         accum[i] = 0.0f;
     }
 
-    // Use double-buffered shared memory for tiles.
-    // Two buffers for A and two for B.
-    __shared__ float As[2][TILE_SIZE][TILE_SIZE];
-    __shared__ float Bs[2][TILE_SIZE][TILE_SIZE];
+    // Shared memory for tiles.
+    // As: TILE_SIZE x TILE_SIZE for matrix A.
+    __shared__ float As[TILE_SIZE][TILE_SIZE];
+    // Bs: TILE_SIZE x (TILE_SIZE+1) for matrix B (padding to reduce bank conflicts).
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];
 
-    // Determine number of tiles along the K dimension.
+    // Number of tiles along the K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
-    int currentBuffer = 0;  // index of the buffer currently used for computation
 
-    // Preload the first tile into the current buffer if available.
-    if (numTiles > 0) {
-        int t = 0;
-        // Load A tile into As[currentBuffer].
+    // Loop over tiles.
+    for (int t = 0; t < numTiles; t++) {
+        // Load A tile into shared memory.
+        // Each thread loads MICRO_TILE_ROWS elements with a vertical stride of BLOCK_DIM_Y.
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
             int colA = t * TILE_SIZE + tx;
             if (rowA < M && colA < K)
-                As[currentBuffer][ty + i * BLOCK_DIM_Y][tx] = A[rowA * K + colA];
+                As[ty + i * BLOCK_DIM_Y][tx] = A[rowA * K + colA];
             else
-                As[currentBuffer][ty + i * BLOCK_DIM_Y][tx] = 0.0f;
+                As[ty + i * BLOCK_DIM_Y][tx] = 0.0f;
         }
-        // Load B tile into Bs[currentBuffer].
+        // Load B tile into shared memory.
+        // Each thread loads elements from B with a vertical stride.
         for (int i = ty; i < TILE_SIZE; i += BLOCK_DIM_Y) {
             int rowB = t * TILE_SIZE + i;
             int colB = colTile + tx;
             if (rowB < K && colB < N)
-                Bs[currentBuffer][i][tx] = B[rowB * N + colB];
+                Bs[i][tx] = B[rowB * N + colB];
             else
-                Bs[currentBuffer][i][tx] = 0.0f;
+                Bs[i][tx] = 0.0f;
         }
-    }
-    __syncthreads();
 
-    // Loop over all tiles.
-    for (int t = 0; t < numTiles; t++) {
-        int nextTile = t + 1;
-        int nextBuffer = currentBuffer ^ 1;  // alternate buffer index (0 <-> 1)
+        __syncthreads();  // Ensure both tiles are fully loaded.
 
-        // If there’s another tile, preload it into the alternate buffer.
-        if (nextTile < numTiles) {
-            // Load next tile of A.
-            for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-                int rowA = rowTile + ty + i * BLOCK_DIM_Y;
-                int colA = nextTile * TILE_SIZE + tx;
-                if (rowA < M && colA < K)
-                    As[nextBuffer][ty + i * BLOCK_DIM_Y][tx] = A[rowA * K + colA];
-                else
-                    As[nextBuffer][ty + i * BLOCK_DIM_Y][tx] = 0.0f;
-            }
-            // Load next tile of B.
-            for (int i = ty; i < TILE_SIZE; i += BLOCK_DIM_Y) {
-                int rowB = nextTile * TILE_SIZE + i;
-                int colB = colTile + tx;
-                if (rowB < K && colB < N)
-                    Bs[nextBuffer][i][tx] = B[rowB * N + colB];
-                else
-                    Bs[nextBuffer][i][tx] = 0.0f;
-            }
-        }
-        __syncthreads();
-
-        // --- Compute partial products using the tile in currentBuffer.
-#pragma unroll
+        // Compute partial products.niv
         for (int k = 0; k < TILE_SIZE; k++) {
-            float bVal = Bs[currentBuffer][k][tx];  // each thread reads one element of B’s row
-#pragma unroll
+            float bVal = Bs[k][tx];
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                 int rowIndex = ty + i * BLOCK_DIM_Y;
-                accum[i] += As[currentBuffer][rowIndex][k] * bVal;
+                // rowIndex is guaranteed to be < TILE_SIZE since TILE_SIZE / BLOCK_DIM_Y = MICRO_TILE_ROWS.
+                accum[i] += As[rowIndex][k] * bVal;
             }
         }
 
-        // Swap buffers for the next iteration.
-        currentBuffer ^= 1;
-        __syncthreads();
+        __syncthreads();  // Wait before loading the next tile.
     }
 
     // Write the computed micro‑tile back to global memory.
@@ -129,6 +98,7 @@ __global__ void matrixMulTiled(
             C[rowC * N + col] = accum[i];
     }
 }
+
 
 // wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
@@ -148,7 +118,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
                 matrixMulTiled<32, 8, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 64:
-                matrixMulTiled<32, 8, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<64, 4, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
@@ -191,7 +161,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
                 matrixMulTiled<32, 8, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 64:
-                matrixMulTiled<32, 4, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<64, 4, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
