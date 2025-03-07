@@ -167,7 +167,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
                 matrixMulTiled<32, 8, 32, 4, 8><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 64:
-                matrixMulTiled<64, 4, 64, 4, 4><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<64, 4, 64, 8, 4><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
