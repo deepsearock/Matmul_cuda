@@ -91,10 +91,22 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
     }
 }
 
+
 // wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
     float *d_A, *d_B, *d_C;
+    float *h_A = new float[M * K];
+    float *h_B = new float[K * N];
+    float *h_C = new float[M * N];
+    float *h_C_ref = new float[M * N];
+
+    // Initialize host memory with random values
+    for (int i = 0; i < M * K; ++i) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
+    for (int i = 0; i < K * N; ++i) h_B[i] = static_cast<float>(rand()) / RAND_MAX;
+
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
+    cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
     dim3 blockDim(tileSize, 256 / tileSize);
     dim3 gridDim((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
@@ -116,8 +128,13 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
                 exit(EXIT_FAILURE);
         }
     }, M, N, K);
-
+    cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
     freeDeviceMemory(d_A, d_B, d_C);
+    delete[] h_A;
+    delete[] h_B;
+    delete[] h_C;
+    delete[] h_C_ref;
+    
     return result;
 }
 
@@ -161,7 +178,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     }, M, N, K);
     // Copy results back to host
     cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
-    /*
+
     // Compute CPU reference result
     matrixMulCPU(h_A, h_B, h_C_ref, M, N, K);
 
@@ -190,7 +207,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     delete[] h_B;
     delete[] h_C;
     delete[] h_C_ref;
-    */
+
     return result;
 }
 

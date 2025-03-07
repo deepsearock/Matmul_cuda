@@ -30,14 +30,30 @@ __global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N,
 inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K, int blockWidth, int blockHeight) {
 
     float *d_A, *d_B, *d_C;
+    float *h_A = new float[M * K];
+    float *h_B = new float[K * N];
+    float *h_C = new float[M * N];
+    float *h_C_ref = new float[M * N];
+
+    // Initialize host matrices with random values
+    for (int i = 0; i < M * K; ++i) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
+    for (int i = 0; i < K * N; ++i) h_B[i] = static_cast<float>(rand()) / RAND_MAX;
+
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
+    cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
     
     dim3 blockDim(blockWidth, blockHeight, 1);
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y, 1);
 
     auto result = measurePerformance([&]() { matrixMulGlobalNaive<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K); }, M, N, K);
     
+    cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
     freeDeviceMemory(d_A, d_B, d_C);
+    delete[] h_A;
+    delete[] h_B;
+    delete[] h_C;
+    delete[] h_C_ref;
 
     return result;
 }
@@ -69,7 +85,7 @@ inline std::pair<double, double> runMatrixMulNaiveWithErrorCheck(int M, int N, i
     cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
 
     // Compute reference result on CPU
-    /*
+
     matrixMulCPU(h_A, h_B, h_C_ref, M, N, K);
 
     // Compute error metrics
@@ -104,8 +120,6 @@ inline std::pair<double, double> runMatrixMulNaiveWithErrorCheck(int M, int N, i
     delete[] h_B;
     delete[] h_C;
     delete[] h_C_ref;
-
-    */
 
     return result;
 }
