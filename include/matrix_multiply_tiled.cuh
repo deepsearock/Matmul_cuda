@@ -17,7 +17,7 @@
 #include <cuda_pipeline.h>  // May be required for __cp_async intrinsics.
 #include <cstdint>
 
-#define WARP_SIZE 32
+#define WARP_SIZE 64
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
 __global__ void matrixMulTiled(
     const float * __restrict__ A,
