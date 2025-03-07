@@ -16,97 +16,101 @@
 // unrolls the inner loop, and uses __restrict__ qualifiers.
 #include <cuda_pipeline.h>  // May be required for __cp_async intrinsics.
 #include <cstdint>
-template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
+template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE, int WARP_DIM_X, int WARP_DIM_Y>
 __global__ void matrixMulTiled(
     const float * __restrict__ A,
     const float * __restrict__ B,
     float * __restrict__ C,
     int M, int N, int K)
 {
-    // Warp tiling: 8x4 (each thread computes a 4x4 submatrix)
-    constexpr int WARP_SIZE = 32;
-    constexpr int WARP_ROWS = 8;  // 8 threads per warp in Y
-    constexpr int WARP_COLS = 4;  // 4 threads per warp in X
+    // Ensure the warp dimensions multiply to 32.
+    static_assert(WARP_DIM_X * WARP_DIM_Y == 32, "Warp dimensions must multiply to 32");
 
-    // Compute thread location
+    // Compute how many warps per block in each dimension.
+    constexpr int WARPS_PER_BLOCK_X = BLOCK_DIM_X / WARP_DIM_X;
+    constexpr int WARPS_PER_BLOCK_Y = BLOCK_DIM_Y / WARP_DIM_Y;
+
+    // Define the micro-tile sizes computed from the block dimensions.
+    constexpr int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y;
+    constexpr int MICRO_TILE_COLS = TILE_SIZE / BLOCK_DIM_X;
+
+    // Block and thread indices.
     int bx = blockIdx.x, by = blockIdx.y;
     int tx = threadIdx.x, ty = threadIdx.y;
-    int warp_id = ty / WARP_ROWS;
-    int lane_id = tx % WARP_COLS;
-    
-    // Compute the global output tile location
+
+    // Compute warp indices within the block.
+    int warp_idx_x = tx / WARP_DIM_X;
+    int warp_idx_y = ty / WARP_DIM_Y;
+    int warp_id = warp_idx_y * WARPS_PER_BLOCK_X + warp_idx_x;
+
+    // Compute lane indices within each warp.
+    int lane_x = tx % WARP_DIM_X;
+    int lane_y = ty % WARP_DIM_Y;
+    int lane_id = lane_y * WARP_DIM_X + lane_x;  // In range [0, 31]
+
+    // Compute the starting row and column of the output tile in C.
     int rowTile = by * TILE_SIZE;
     int colTile = bx * TILE_SIZE;
 
-    // Registers for accumulation
-    float accum[WARP_ROWS][WARP_COLS] = {0.0f};
+    // Each thread computes a MICRO_TILE_ROWS x MICRO_TILE_COLS submatrix.
+    float accum[MICRO_TILE_ROWS][MICRO_TILE_COLS] = {0.0f};
 
-    // Shared memory for tiling
+    // Shared memory tiles for A and B.
     __shared__ float As[TILE_SIZE][TILE_SIZE];
     __shared__ float Bs[TILE_SIZE][TILE_SIZE];
 
-    // Number of tiles in the K dimension
+    // Number of tiles along the K dimension.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
     for (int t = 0; t < numTiles; t++) {
-        // Load tiles from global memory into shared memory
-        #pragma unroll
-        for (int i = 0; i < WARP_ROWS; i++) {
-            int rowA = rowTile + ty + i;
+        // === Load A tile into shared memory ===
+        // Each thread loads MICRO_TILE_ROWS elements from A.
+        for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+            int rowA = rowTile + ty + i * BLOCK_DIM_Y;
             int colA = t * TILE_SIZE + tx;
             if (rowA < M && colA < K)
-                As[ty + i][tx] = A[rowA * K + colA];
+                As[ty + i * BLOCK_DIM_Y][tx] = A[rowA * K + colA];
             else
-                As[ty + i][tx] = 0.0f;
+                As[ty + i * BLOCK_DIM_Y][tx] = 0.0f;
         }
 
-        #pragma unroll
-        for (int i = 0; i < WARP_ROWS; i++) {
-            int rowB = t * TILE_SIZE + (warp_id * WARP_ROWS + i);
-            int colB = colTile + lane_id * WARP_COLS;
+        // === Load B tile into shared memory ===
+        // Here we use each thread to load MICRO_TILE_COLS elements from B.
+        for (int j = 0; j < MICRO_TILE_COLS; j++) {
+            int rowB = t * TILE_SIZE + ty;
+            int colB = colTile + tx + j * BLOCK_DIM_X;
             if (rowB < K && colB < N)
-                *(float4*)&Bs[rowB % TILE_SIZE][colB % TILE_SIZE] = *(float4*)&B[rowB * N + colB];
+                Bs[ty][tx + j * BLOCK_DIM_X] = B[rowB * N + colB];
             else
-                *(float4*)&Bs[rowB % TILE_SIZE][colB % TILE_SIZE] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+                Bs[ty][tx + j * BLOCK_DIM_X] = 0.0f;
         }
 
-        __syncthreads();  // Synchronize before computation
+        __syncthreads();  // Ensure both tiles are fully loaded.
 
-        // Compute the warp-tiled matrix multiplication
-        #pragma unroll
+        // === Compute partial products ===
         for (int k = 0; k < TILE_SIZE; k++) {
-            float bVal[WARP_COLS];
-            #pragma unroll
-            for (int j = 0; j < WARP_COLS; j++) {
-                bVal[j] = Bs[k][lane_id * WARP_COLS + j];
-            }
-
-            #pragma unroll
-            for (int i = 0; i < WARP_ROWS; i++) {
-                accum[i][0] += As[ty + i][k] * bVal[0];
-                accum[i][1] += As[ty + i][k] * bVal[1];
-                accum[i][2] += As[ty + i][k] * bVal[2];
-                accum[i][3] += As[ty + i][k] * bVal[3];
+            for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+                float a_val = As[ty + i * BLOCK_DIM_Y][k];
+                for (int j = 0; j < MICRO_TILE_COLS; j++) {
+                    float b_val = Bs[k][tx + j * BLOCK_DIM_X];
+                    accum[i][j] += a_val * b_val;
+                }
             }
         }
 
-        __syncthreads();  // Wait before loading next tile
+        __syncthreads();  // Synchronize before loading the next tile.
     }
 
-    // Store results in global memory
-    #pragma unroll
-    for (int i = 0; i < WARP_ROWS; i++) {
-        int rowC = rowTile + ty + i;
-        int colC = colTile + lane_id * WARP_COLS;
-        if (rowC < M && colC < N) {
-            *(float4*)&C[rowC * N + colC] = make_float4(accum[i][0], accum[i][1], accum[i][2], accum[i][3]);
+    // === Write the computed submatrix to global memory ===
+    for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+        for (int j = 0; j < MICRO_TILE_COLS; j++) {
+            int rowC = rowTile + ty + i * BLOCK_DIM_Y;
+            int colC = colTile + tx + j * BLOCK_DIM_X;
+            if (rowC < M && colC < N)
+                C[rowC * N + colC] = accum[i][j];
         }
     }
 }
-
-
-
-
 
 // wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
@@ -120,13 +124,13 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     auto result = measurePerformance([&]() {
         switch (tileSize) {
             case 16:
-                matrixMulTiled<16, 16, 16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<16, 16, 16, 8, 4><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<32, 8, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32, 8, 32, 8, 4><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 64:
-                matrixMulTiled<64, 4, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<64, 4, 64, 8, 4><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
@@ -163,13 +167,13 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     auto result = measurePerformance([&]() {
         switch (tileSize) {
             case 16:
-                matrixMulTiled<16, 16, 16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<16, 16, 16, 8, 4><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
-                matrixMulTiled<32, 8, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32, 8, 32, 8, 4><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 64:
-                matrixMulTiled<64, 4, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<64, 4, 64, 8 ,4><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
