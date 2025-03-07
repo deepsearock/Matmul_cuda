@@ -91,6 +91,7 @@ void gpuselect(int device) {
 
 // memory allocation function on gpu
 inline void allocateDeviceMemory(float **d_A, float **d_B, float **d_C, int M, int N, int K) {
+    cudaFree(0)
     checkCudaErrors(cudaMalloc((void**)d_A, M * K * sizeof(float)));
     checkCudaErrors(cudaMalloc((void**)d_B, K * N * sizeof(float)));
     checkCudaErrors(cudaMalloc((void**)d_C, M * N * sizeof(float)));
