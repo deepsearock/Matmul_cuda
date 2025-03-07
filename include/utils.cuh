@@ -79,8 +79,7 @@ void gpuselect(int device) {
     cudaDeviceProp prop;
     for (int i = 0; i < deviceCount; i++) {
         cudaGetDeviceProperties(&prop, i);
-        std::cout << "  GPU " << i << ": " << prop.name << " (Compute Capability: " 
-                  << prop.major << "." << prop.minor << ")\n";
+        std::cout << "  GPU " << i << ": " << prop.name << " (Compute Capability: " << prop.major << "." << prop.minor << ")\n";
     }
 
     int selectedDevice = device;
