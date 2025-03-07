@@ -7,8 +7,8 @@
 #include "matrix_multiply_naive.cuh"
 #include "utils.cuh"
 
-void printUsage() {
-    std::cout << "Usage: "<< argv[0] << " -i <rowDimA> <colDimA> <colDimB> <gpu>" << std::endl;
+void printUsage(char *argv) {
+    std::cout << "Usage: "<< argv << " -i <rowDimA> <colDimA> <colDimB> <gpu>" << std::endl;
     std::cout << "  <rowDimA>: Number of rows in matrix A and matrix C" << std::endl;
     std::cout << "  <colDimA>: Number of columns in matrix A (and number of rows in matrix B)" << std::endl;
     std::cout << "  <colDimB>: Number of columns in matrix B and matrix C" << std::endl;
@@ -18,7 +18,7 @@ void printUsage() {
 
 int main(int argc, char *argv[]) {
     if (argc != 6 || std::string(argv[1]) != "-i") {
-        printUsage();
+        printUsage(argv[0]);
     }
 
     int rowDimA = std::atoi(argv[2]);
