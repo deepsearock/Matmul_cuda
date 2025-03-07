@@ -17,7 +17,7 @@
 #include <cuda_pipeline.h>  // May be required for __cp_async intrinsics.
 #include <cstdint>
 
-#define WARP_SIZE 64
+#define WARP_SIZE 32
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
 __global__ void matrixMulTiled(
     const float * __restrict__ A,
@@ -82,14 +82,13 @@ __global__ void matrixMulTiled(
 
         for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = Bs[k][lane_id];
-
-
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-                int rowIndex = ty + i * BLOCK_DIM_Y;
-                accum[i][0] += As[rowIndex][k] * bVal;
+                for (int j = 0; j < MICRO_TILE_COLS; j++) {
+                    // Map j to an appropriate index in shared memory for B or adjust your logic accordingly.
+                    accum[i][j] = __fmaf_rn(As[ty + i * BLOCK_DIM_Y][k], bVal, accum[i][j]);
+                }
             }
         }
-
         __syncthreads();  // Wait before loading the next tile
     }
 
