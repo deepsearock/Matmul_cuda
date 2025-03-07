@@ -230,7 +230,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
                 matrixMulTiled<32, 8, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 64:
-                matrixMulTiledDoubleBuffered<48, 5, 48><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiledDoubleBuffered<42, 6, 42><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
@@ -273,7 +273,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
                 matrixMulTiled<32, 8, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 64:
-                matrixMulTiledDoubleBuffered<48, 5, 48><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiledDoubleBuffered<42, 6, 42><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
