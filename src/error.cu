@@ -6,7 +6,7 @@
 #include "matrix_multiply_tiled.cuh"
 #include <unistd.h>
 #include <random>
-int main() {
+int main(int argc, char *argv[]) {
     // Set matrix dimensions
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     std::default_random_engine generator(seed);
