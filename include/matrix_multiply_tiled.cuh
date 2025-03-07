@@ -94,9 +94,12 @@ __global__ void matrixMulTiled(
 
     // Write computed values to global memory
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-        int rowC = rowTile + ty + i * BLOCK_DIM_Y;
-        if (rowC < M && col < N)
-            C[rowC * N + col] = accum[i][0];
+        for (int j = 0; j < MICRO_TILE_COLS; j++) {
+            int globalRow = rowTile + ty * MICRO_TILE_ROWS + i;
+            int globalCol = colTile + tx * MICRO_TILE_COLS + j;
+            if (globalRow < M && globalCol < N)
+                C[globalRow * N + globalCol] = accum[i][j];
+        }
     }
 }
 
