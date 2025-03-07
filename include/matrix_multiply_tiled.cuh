@@ -83,9 +83,11 @@ __global__ void matrixMulTiled(
         for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = Bs[k][lane_id];
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+                int rowIndex = ty + i * BLOCK_DIM_Y;
                 for (int j = 0; j < MICRO_TILE_COLS; j++) {
                     // Map j to an appropriate index in shared memory for B or adjust your logic accordingly.
-                    accum[i][j] = __fmaf_rn(As[ty + i * BLOCK_DIM_Y][k], bVal, accum[i][j]);
+                    int colIndex = tx * MICRO_TILE_COLS + j;
+                    accum[i][j] = __fmaf_rn(As[rowIndex][k], Bs[k][colIndex], accum[i][j]);
                 }
             }
         }
