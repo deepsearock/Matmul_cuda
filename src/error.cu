@@ -6,11 +6,11 @@
 #include "matrix_multiply_tiled.cuh"
 #include <unistd.h>
 #include <random>
-int main(int argc, char *argv[]) {
+int main() {
     // Set matrix dimensions
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     std::default_random_engine generator(seed);
-    std::uniform_int_distribution<int> distribution(1, 8000);
+    std::uniform_int_distribution<int> distribution(1, 2000);
     int M = distribution(generator); // Number of rows in A and C
     int N = distribution(generator); // Number of columns in B and C
     int K = distribution(generator); // Number of columns in A and rows in B
