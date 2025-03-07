@@ -84,7 +84,8 @@ __global__ void matrixMulTiled(
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                 int rowIndex = ty + i * BLOCK_DIM_Y;
                 // rowIndex is guaranteed to be < TILE_SIZE since TILE_SIZE / BLOCK_DIM_Y = MICRO_TILE_ROWS.
-                accum[i] += As[rowIndex][k] * bVal;
+                // accum[i] += As[rowIndex][k] * bVal;
+                __fmaf_rn(As[rowIndex][k], bVal, accum[i])
             }
         }
 
