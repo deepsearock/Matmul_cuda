@@ -26,7 +26,7 @@ __global__ void matrixMulTiled(
 {
     // Ensure TILE_SIZE is divisible by BLOCK_DIM_Y.
     const int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y;  // e.g., 64/16 = 4
-    
+
     // Block indices.
     int bx = blockIdx.x, by = blockIdx.y;
     // Thread indices.
@@ -40,6 +40,7 @@ __global__ void matrixMulTiled(
 
     // Each thread accumulates MICRO_TILE_ROWS results in registers.
     float accum[MICRO_TILE_ROWS];
+    #pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         accum[i] = 0.0f;
     }
@@ -55,46 +56,40 @@ __global__ void matrixMulTiled(
 
     // Loop over tiles.
     for (int t = 0; t < numTiles; t++) {
-        // Compute effective tile width for A and effective tile height for B.
-        int effectiveTileK = (t * TILE_SIZE + TILE_SIZE <= K) ? TILE_SIZE : (K - t * TILE_SIZE);
-        int effectiveTileN = (colTile + TILE_SIZE <= N) ? TILE_SIZE : (N - colTile);
-
-        // --- Load A tile into shared memory.
-        // Each thread loads MICRO_TILE_ROWS elements along the row.
+        // Load A tile into shared memory.
+        // Each thread loads MICRO_TILE_ROWS elements with a vertical stride of BLOCK_DIM_Y.
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
             int colA = t * TILE_SIZE + tx;
-            // Use the effective tile width.
-            if (rowA < M && colA < t * TILE_SIZE + effectiveTileK)
+            if (rowA < M && colA < K)
                 As[ty + i * BLOCK_DIM_Y][tx] = A[rowA * K + colA];
             else
                 As[ty + i * BLOCK_DIM_Y][tx] = 0.0f;
         }
-
-        // --- Load B tile into shared memory.
-        // Each thread loads elements along the column.
+        // Load B tile into shared memory.
+        // Each thread loads elements from B with a vertical stride.
         for (int i = ty; i < TILE_SIZE; i += BLOCK_DIM_Y) {
             int rowB = t * TILE_SIZE + i;
             int colB = colTile + tx;
-            // Use the effective tile height for B.
-            if (rowB < K && colB < colTile + effectiveTileN)
+            if (rowB < K && colB < N)
                 Bs[i][tx] = B[rowB * N + colB];
             else
                 Bs[i][tx] = 0.0f;
         }
-        __syncthreads();
 
-        // --- Compute partial products.
-        // Only loop over the effective width of the tile.
-        for (int k = 0; k < effectiveTileK; k++) {
+        __syncthreads();  // Ensure both tiles are fully loaded.
+
+        // Compute partial products.
+        for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = Bs[k][tx];
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                 int rowIndex = ty + i * BLOCK_DIM_Y;
-                // Use FMA to combine multiply and add.
-                accum[i] = __fmaf_rn(As[rowIndex][k], bVal, accum[i]);
+                // rowIndex is guaranteed to be < TILE_SIZE since TILE_SIZE / BLOCK_DIM_Y = MICRO_TILE_ROWS.
+                accum[i] += As[rowIndex][k] * bVal;
             }
         }
-        __syncthreads();
+
+        __syncthreads();  // Wait before loading the next tile.
     }
 
     // Write the computed micro‑tile back to global memory.
