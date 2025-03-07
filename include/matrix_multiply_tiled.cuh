@@ -20,34 +20,34 @@
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
 __global__ void matrixMulTiled(const float * __restrict__ A, const float * __restrict__ B, float * __restrict__ C, int M, int N, int K)
 {
-    // Ensure TILE_SIZE is divisible by BLOCK_DIM_Y.
+    //tile size has to be divisible by block dim y
     constexpr int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y;
 
-    // Block and thread indices.
+    //block and thread indices
     int bx = blockIdx.x, by = blockIdx.y;
     int tx = threadIdx.x, ty = threadIdx.y;
 
-    // Compute starting tile location.
+    //compute the starting location
     int rowTile = by * TILE_SIZE;
     int colTile = bx * TILE_SIZE;
 
-    // Compute output column each thread is responsible for.
+    //compute the output column for each thread
     int col = colTile + tx;
 
-    // Use registers for accumulation.
+    //accumalate in registers
     float accum[MICRO_TILE_ROWS] = {0.0f};
 
-    // Shared memory tiles.
+    //shared memory tiles
     __shared__ float As[TILE_SIZE][TILE_SIZE];
-    __shared__ float Bs[TILE_SIZE][TILE_SIZE];  // Padding to avoid bank conflicts.
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];
 
-    // Number of tiles in K dimension.
+    //number of tiles in the k dimension
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
 
-    // Iterate over tiles.
+    //iterate over tiles
     #pragma unroll
     for (int t = 0; t < numTiles; t++) {
-        // Load A tile into shared memory.
+        //load A_tile into shared memory
         #pragma unroll
         for (int i = 0; i < MICRO_TILE_ROWS; i++) {
             int rowA = rowTile + ty + i * BLOCK_DIM_Y;
@@ -58,7 +58,7 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
                 As[ty + i * BLOCK_DIM_Y][tx] = 0.0f;
         }
 
-        // Load B tile into shared memory (using warp-wide memory coalescing).
+        //load B_tile into shared memory
         #pragma unroll
         for (int i = ty; i < TILE_SIZE; i += BLOCK_DIM_Y) {
             int rowB = t * TILE_SIZE + i;
@@ -69,9 +69,9 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
                 Bs[i][tx] = 0.0f;
         }
 
-        __syncthreads();  // Ensure both tiles are loaded.
+        __syncthreads();  //sync here to make sure both are loaded
 
-        // Compute partial products using warp-level tiling.
+        //compute using partial warp tiling 1 dimension warp tiling.
         #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
             float bVal = Bs[k][tx];
@@ -83,10 +83,10 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
             }
         }
 
-        __syncthreads();  // Wait before loading the next tile.
+        __syncthreads();  //sync to wait for next tile
     }
 
-    // Write the computed values back to global memory.
+    //write back to global memory
     #pragma unroll
     for (int i = 0; i < MICRO_TILE_ROWS; i++) {
         int rowC = rowTile + ty + i * BLOCK_DIM_Y;
@@ -96,7 +96,7 @@ __global__ void matrixMulTiled(const float * __restrict__ A, const float * __res
 }
 
 
-// wrapper function that measures performance and does memory management
+//wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
     float *d_A, *d_B, *d_C;
     float *h_A = new float[M * K];
@@ -104,10 +104,11 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     float *h_C = new float[M * N];
     float *h_C_ref = new float[M * N];
 
-    // Initialize host memory with random values
+    //initialize host memory with random values
     for (int i = 0; i < M * K; ++i) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
     for (int i = 0; i < K * N; ++i) h_B[i] = static_cast<float>(rand()) / RAND_MAX;
 
+    //allocate and copy memory to device
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
     cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
@@ -115,7 +116,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
     dim3 blockDim(tileSize, 256 / tileSize);
     dim3 gridDim((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
 
-    // Launch kernel using runtime-determined grid and block sizes
+    //launch kernel using runtime determined grid and block sizes
     auto result = measurePerformance([&]() {
         switch (tileSize) {
             case 16:
@@ -132,7 +133,10 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
                 exit(EXIT_FAILURE);
         }
     }, M, N, K);
+    //copy results back to host
     cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    //free memory
     freeDeviceMemory(d_A, d_B, d_C);
     delete[] h_A;
     delete[] h_B;
@@ -149,21 +153,19 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     float *h_C = new float[M * N];
     float *h_C_ref = new float[M * N];
 
-    // Initialize host memory with random values
+    //initialize host memory with random values
     for (int i = 0; i < M * K; ++i) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
     for (int i = 0; i < K * N; ++i) h_B[i] = static_cast<float>(rand()) / RAND_MAX;
 
-    // Allocate and copy memory to device
+    //allocate and copy memory to device
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
     cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
-
-    // Launch kernel using runtime-determined grid and block sizes
     dim3 blockDim(tileSize, 256 / tileSize);
     dim3 gridDim((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
 
-    // Launch kernel using runtime-determined grid and block sizes
+    //launch kernel using runtime determined grid and block sizes
     auto result = measurePerformance([&]() {
         switch (tileSize) {
             case 16:
@@ -180,16 +182,16 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
                 exit(EXIT_FAILURE);
         }
     }, M, N, K);
-    // Copy results back to host
+    //copy results back to host
     cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
 
-    // Compute CPU reference result
+    //compute cpu reference result
     matrixMulCPU(h_A, h_B, h_C_ref, M, N, K);
 
-    // Compute error metrics
+    //errors
     double mse = 0.0, max_error = 0.0;
     int error_count = 0;
-    double error_threshold = 1e-3; // Acceptable error threshold
+    double error_threshold = 1e-3; //error threshold
 
     for (int i = 0; i < M * N; ++i) {
         double diff = fabs(h_C[i] - h_C_ref[i]);
@@ -200,12 +202,12 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     mse /= (M * N);
     double error_percentage = (error_count * 100.0) / (M * N);
 
-    // Print error results
+    //error results
     std::cout << "Error Percentage: " << error_percentage << "%" << std::endl;
     std::cout << "Mean Squared Error: " << mse << std::endl;
     std::cout << "Max Absolute Error: " << max_error << std::endl;
 
-    // Clean up
+    //free memory
     freeDeviceMemory(d_A, d_B, d_C);
     delete[] h_A;
     delete[] h_B;

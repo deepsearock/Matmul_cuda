@@ -27,7 +27,7 @@ __global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N,
     }
 }
 
-// wrapper function that measures performance and does memory management
+//wrapper function that measures performance and does memory management
 inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K, int blockWidth, int blockHeight) {
 
     float *d_A, *d_B, *d_C;
@@ -36,26 +36,33 @@ inline std::pair<double, double> runMatrixMulNaive(int M, int N, int K, int bloc
     float *h_C = new float[M * N];
     float *h_C_ref = new float[M * N];
 
-    // Initialize host matrices with random values
+    //initialize matrices with random values
     for (int i = 0; i < M * K; ++i) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
     for (int i = 0; i < K * N; ++i) h_B[i] = static_cast<float>(rand()) / RAND_MAX;
 
+    //allocate device memory
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
     cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
     
+    //define grid and block dimensions
     dim3 blockDim(blockWidth, blockHeight, 1);
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y, 1);
 
+    //launch kernel and measure performance
     auto result = measurePerformance([&]() { matrixMulGlobalNaive<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K); }, M, N, K);
     
+    //copy results back to host
     cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
     freeDeviceMemory(d_A, d_B, d_C);
+
+    //free memory
     delete[] h_A;
     delete[] h_B;
     delete[] h_C;
     delete[] h_C_ref;
 
+    //return tflops and ms
     return result;
 }
 
@@ -66,30 +73,30 @@ inline std::pair<double, double> runMatrixMulNaiveWithErrorCheck(int M, int N, i
     float *h_C = new float[M * N];
     float *h_C_ref = new float[M * N];
 
-    // Initialize host matrices with random values
+    //initialize matrices with random values
     for (int i = 0; i < M * K; ++i) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
     for (int i = 0; i < K * N; ++i) h_B[i] = static_cast<float>(rand()) / RAND_MAX;
 
-    // Allocate device memory
+    //allocate device memory
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
     cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Define grid and block dimensions
+    //define grid and block dimensions
     dim3 blockDim(blockWidth, blockHeight);
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
 
-    // Launch kernel and measure performance
+    //launch kernel and measure performance
     auto result = measurePerformance([&]() { matrixMulGlobalNaive<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K); }, M, N, K);
 
-    // Copy results back to host
+    //copy results back to host
     cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
 
-    // Compute reference result on CPU
+    //compute the ref results on cpu
 
     matrixMulCPU(h_A, h_B, h_C_ref, M, N, K);
 
-    // Compute error metrics
+    //compute errors
     double mse = 0.0, max_error = 0.0;
     for (int i = 0; i < M * N; ++i) {
         double diff = fabs(h_C[i] - h_C_ref[i]);
@@ -97,12 +104,12 @@ inline std::pair<double, double> runMatrixMulNaiveWithErrorCheck(int M, int N, i
         max_error = std::max(max_error, diff);
     }
     mse /= (M * N);
-    double error_threshold = 1e-3; // Define an acceptable error threshold
+    double error_threshold = 1e-3; //error threshold
     int error_count = 0;
 
     for (int i = 0; i < M * N; ++i) {
         double diff = fabs(h_C[i] - h_C_ref[i]);
-        if (diff > error_threshold) { // Consider it an error if the difference is too large
+        if (diff > error_threshold) {
             error_count++;
         }
     }
@@ -111,17 +118,18 @@ inline std::pair<double, double> runMatrixMulNaiveWithErrorCheck(int M, int N, i
 
     std::cout << "Error Percentage: " << error_percentage << "%" << std::endl;
     
-    // Print error results
+    //error results
     std::cout << "Mean Squared Error: " << mse << std::endl;
     std::cout << "Max Absolute Error: " << max_error << std::endl;
 
-    // Free memory
+    //free memory
     freeDeviceMemory(d_A, d_B, d_C);
     delete[] h_A;
     delete[] h_B;
     delete[] h_C;
     delete[] h_C_ref;
-
+    
+    //return tflops and ms
     return result;
 }
 
