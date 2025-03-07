@@ -36,8 +36,8 @@ int main(int argc, char *argv[]) {
     int tileSizes[] = {16,32,64};
     std::pair<int, int> blockConfigs[] = {{16, 16}, {32, 8}, {64, 4}};
     int block_height_tile = 0;
-    for (int run = 0; run < 2; ++run) {
-         // Fix structured bindings issue
+    for (int i = 0; i < 3; ++i) {
+        int tileSize = tileSizes[i];
         int blockWidth = blockConfigs[tileSize].first;
         int blockHeight = blockConfigs[tileSize].second;
 
