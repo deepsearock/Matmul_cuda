@@ -8,3 +8,6 @@ build/CMakeFiles/3.30.5-msvc23/VCTargetsPath.vcxproj
 build/CMakeFiles/3.30.5-msvc23/CompilerIdCUDA/CMakeCUDACompilerId.cu
 build/CMakeFiles/3.30.5-msvc23/VCTargetsPath/x64/Debug/VCTargetsPath.recipe
 build/CMakeFiles/3.30.5-msvc23/VCTargetsPath/x64/Debug/VCTargetsPath.tlog/VCTargetsPath.lastbuildstate
+.vscode/c_cpp_properties.json
+.vscode/settings.json
+cs810_lab1_Zhaorui_Wang.zip
