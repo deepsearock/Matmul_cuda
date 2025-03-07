@@ -10,9 +10,9 @@
 #include <random>
 
 // naive 
-__global__ void matrixMulGlobalNaive(float *A, float *B, float *C, int M, int N, int K) {
+__global__ void matrixMulGlobalNaive(int M, int N, int K) {
     
-    //calculate index
+    // calculate index
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
