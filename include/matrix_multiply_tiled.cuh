@@ -17,6 +17,7 @@
 #include <cuda_pipeline.h>  // May be required for __cp_async intrinsics.
 #include <cstdint>
 
+#define WARP_SIZE 32
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y, int TILE_SIZE>
 __global__ void matrixMulTiled(
     const float * __restrict__ A,
@@ -66,7 +67,7 @@ __global__ void matrixMulTiled(
 
         // Load B tile into shared memory (warp-wide loading)
 
-        for (int i = warp_id; i < TILE_SIZE; i += (BLOCK_DIM_Y / (32 / BLOCK_DIM_X))) {
+        for (int i = warp_id; i < TILE_SIZE; i += (BLOCK_DIM_Y / (WARP_SIZE / BLOCK_DIM_X))) {
             int rowB = t * TILE_SIZE + i;
             int colB = colTile + lane_id;
             if (rowB < K && colB < N)
