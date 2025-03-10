@@ -389,19 +389,15 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
 
     //launch kernel using runtime determined grid and block sizes
     auto result = measurePerformance([&]() {
-        switch (tileSize) {
-            case 16:
-                matrixMulTiled<16, 16, 16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
-                break;
-            case 32:
-                matrixMulTiled<32, 8, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
-                break;
-            case 64:
-                matrixMulTiled<64, 4, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
-                break;
-            default:
-                std::cerr << "Unsupported tile size" << std::endl;
-                exit(EXIT_FAILURE);
+        if (tileSizeY == 64 && tileSizeX == 128 && tileSizeK == 16) {
+            matrixMulTiledRect<16, 16, 64, 128, 16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+        } else if (tileSizeY == 32 && tileSizeX == 64 && tileSizeK == 16) {
+            matrixMulTiledRect<8, 32, 32, 64, 16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+        } else if (tileSizeY == 16 && tileSizeX == 32 && tileSizeK == 16) {
+            matrixMulTiledRect<16, 16, 16, 32, 16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+        } else {
+            std::cerr << "Unsupported tile configuration" << std::endl;
+            exit(EXIT_FAILURE);
         }
     }, M, N, K);
     //copy results back to host
