@@ -8,19 +8,13 @@
 #include <cmath>
 #include <algorithm>
 #include "utils.cuh"
+#include <cstdint>
 
 // Optimized Tiled Matrix Multiplication Kernel
 // TILE_SIZE is a compile-time parameter.
 // blockDim.y is flexible.
 // This version uses padding for the B tile to reduce bank conflicts,
 // unrolls the inner loop, and uses __restrict__ qualifiers.
-#include <cuda_pipeline.h>  // May be required for __cp_async intrinsics.
-#include <cstdint>
-
-#include <cuda_pipeline.h>  // For __cp_async intrinsics.
-#include <cstdint>
-#include <iostream>
-#include <utility>
 
 // As before, we assume matrices are stored in row–major order.
 // This version uses double–buffering for asynchronous global memory loads.
