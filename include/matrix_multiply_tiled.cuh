@@ -434,7 +434,6 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
 
     //allocate and copy memory to device
     // Allocate and copy device memory.
-    float *d_A, *d_B, *d_C;
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
     // Create a CUDA stream.
     cudaStream_t stream;
