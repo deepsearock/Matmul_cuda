@@ -35,7 +35,7 @@ __global__ void matrixMulTiled(const float * __restrict__ A,
     int rowTile = by * TILE_SIZE;
     int colTile = bx * TILE_SIZE;
 
-    // Use shared memory arrays padded to avoid bank conflicts.
+    // Shared memory arrays are padded (+1) to avoid bank conflicts.
     __shared__ float As[TILE_SIZE][TILE_SIZE + 1];
     __shared__ float Bs[TILE_SIZE][TILE_SIZE + 1];
 
@@ -49,12 +49,11 @@ __global__ void matrixMulTiled(const float * __restrict__ A,
     // Loop over the K dimension tiles.
     int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
     for (int t = 0; t < numTiles; t++) {
-        // --- Load tile of A into shared memory ---
-        // Check if this tile is fully in bounds to enable vectorized loads.
+        // --- Load tile of A into shared memory with global memory coalescing ---
         bool fullTileA = ((rowTile + baseRow + MICRO_TILE_ROWS) <= M) &&
                          ((t * TILE_SIZE + baseCol + MICRO_TILE_COLS) <= K);
         if (fullTileA) {
-            // Use the widest vectorized load available.
+            // Vectorized loads improve coalescing.
             if constexpr (MICRO_TILE_COLS % 4 == 0) {
                 typedef float4 Vec;
                 constexpr int vecWidth = 4;
@@ -97,6 +96,7 @@ __global__ void matrixMulTiled(const float * __restrict__ A,
                 constexpr int vecWidth = 2;
                 int numVecs = MICRO_TILE_COLS / vecWidth;
                 int aGlobalColStart = t * TILE_SIZE + baseCol;
+                #pragma unroll
                 for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                     int globalRow = rowTile + baseRow + i;
                     const Vec* aVecPtr = reinterpret_cast<const Vec*>(&A[globalRow * K + aGlobalColStart]);
@@ -118,12 +118,13 @@ __global__ void matrixMulTiled(const float * __restrict__ A,
                     for (int j = 0; j < MICRO_TILE_COLS; j++) {
                         int globalCol = aGlobalColStart + j;
                         int sharedCol = baseCol + j;
-                        As[baseRow + i][sharedCol] = (globalRow < M && globalCol < K) ? A[globalRow * K + globalCol] : 0.0f;
+                        As[baseRow + i][sharedCol] =
+                            (globalRow < M && globalCol < K) ? A[globalRow * K + globalCol] : 0.0f;
                     }
                 }
             }
         } else {
-            // Tile not fully in bounds: use scalar loads with bounds checking.
+            // Out-of-bound loads: use scalar loads with bounds checking.
             #pragma unroll
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                 int globalRow = rowTile + baseRow + i;
@@ -132,12 +133,13 @@ __global__ void matrixMulTiled(const float * __restrict__ A,
                 for (int j = 0; j < MICRO_TILE_COLS; j++) {
                     int globalCol = aGlobalColStart + j;
                     int sharedCol = baseCol + j;
-                    As[baseRow + i][sharedCol] = (globalRow < M && globalCol < K) ? A[globalRow * K + globalCol] : 0.0f;
+                    As[baseRow + i][sharedCol] =
+                        (globalRow < M && globalCol < K) ? A[globalRow * K + globalCol] : 0.0f;
                 }
             }
         }
 
-        // --- Load tile of B into shared memory ---
+        // --- Load tile of B into shared memory with global memory coalescing ---
         bool fullTileB = ((t * TILE_SIZE + baseRow + MICRO_TILE_ROWS) <= K) &&
                          ((colTile + baseCol + MICRO_TILE_COLS) <= N);
         if (fullTileB) {
@@ -204,7 +206,8 @@ __global__ void matrixMulTiled(const float * __restrict__ A,
                     for (int j = 0; j < MICRO_TILE_COLS; j++) {
                         int globalCol = bGlobalColStart + j;
                         int sharedCol = baseCol + j;
-                        Bs[baseRow + i][sharedCol] = (globalRow < K && globalCol < N) ? B[globalRow * N + globalCol] : 0.0f;
+                        Bs[baseRow + i][sharedCol] =
+                            (globalRow < K && globalCol < N) ? B[globalRow * N + globalCol] : 0.0f;
                     }
                 }
             }
@@ -217,7 +220,8 @@ __global__ void matrixMulTiled(const float * __restrict__ A,
                 for (int j = 0; j < MICRO_TILE_COLS; j++) {
                     int globalCol = bGlobalColStart + j;
                     int sharedCol = baseCol + j;
-                    Bs[baseRow + i][sharedCol] = (globalRow < K && globalCol < N) ? B[globalRow * N + globalCol] : 0.0f;
+                    Bs[baseRow + i][sharedCol] =
+                        (globalRow < K && globalCol < N) ? B[globalRow * N + globalCol] : 0.0f;
                 }
             }
         }
@@ -225,9 +229,12 @@ __global__ void matrixMulTiled(const float * __restrict__ A,
         __syncthreads(); // Ensure both shared memory tiles are fully loaded.
 
         // --- Multiply the two tiles ---
+        #pragma unroll
         for (int k = 0; k < TILE_SIZE; k++) {
+            #pragma unroll
             for (int i = 0; i < MICRO_TILE_ROWS; i++) {
                 float aVal = As[baseRow + i][k];
+                #pragma unroll
                 for (int j = 0; j < MICRO_TILE_COLS; j++) {
                     accum[i][j] = __fmaf_rn(aVal, Bs[k][baseCol + j], accum[i][j]);
                 }
@@ -238,12 +245,51 @@ __global__ void matrixMulTiled(const float * __restrict__ A,
     }
 
     // --- Write the accumulated sub-tile back to global memory ---
-    for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-        int globalRow = rowTile + ty * MICRO_TILE_ROWS + i;
-        for (int j = 0; j < MICRO_TILE_COLS; j++) {
-            int globalCol = colTile + tx * MICRO_TILE_COLS + j;
-            if (globalRow < M && globalCol < N)
-                C[globalRow * N + globalCol] = accum[i][j];
+    // Use vectorized (coalesced) stores when possible.
+    if constexpr (MICRO_TILE_COLS % 4 == 0) {
+        typedef float4 Vec;
+        constexpr int vecWidth = 4;
+        int numVecs = MICRO_TILE_COLS / vecWidth;
+        #pragma unroll
+        for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+            int globalRow = rowTile + ty * MICRO_TILE_ROWS + i;
+            if (globalRow < M) {
+                int colStart = colTile + tx * MICRO_TILE_COLS;
+                bool fullStore = (colStart + MICRO_TILE_COLS) <= N;
+                if (fullStore) {
+                    Vec* cVecPtr = reinterpret_cast<Vec*>(&C[globalRow * N + colStart]);
+                    #pragma unroll
+                    for (int v = 0; v < numVecs; v++) {
+                        Vec vecVal;
+                        int base = v * vecWidth;
+                        vecVal.x = accum[i][base];
+                        vecVal.y = accum[i][base + 1];
+                        vecVal.z = accum[i][base + 2];
+                        vecVal.w = accum[i][base + 3];
+                        cVecPtr[v] = vecVal;
+                    }
+                } else {
+                    // Fallback to scalar stores if the row isn’t fully in bounds.
+                    #pragma unroll
+                    for (int j = 0; j < MICRO_TILE_COLS; j++) {
+                        int globalCol = colStart + j;
+                        if (globalCol < N)
+                            C[globalRow * N + globalCol] = accum[i][j];
+                    }
+                }
+            }
+        }
+    } else {
+        // Fallback to scalar stores if vectorized store is not applicable.
+        #pragma unroll
+        for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+            int globalRow = rowTile + ty * MICRO_TILE_ROWS + i;
+            #pragma unroll
+            for (int j = 0; j < MICRO_TILE_COLS; j++) {
+                int globalCol = colTile + tx * MICRO_TILE_COLS + j;
+                if (globalRow < M && globalCol < N)
+                    C[globalRow * N + globalCol] = accum[i][j];
+            }
         }
     }
 }
