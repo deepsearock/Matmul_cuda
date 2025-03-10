@@ -67,7 +67,7 @@ __device__ inline void vectorizedLoad(const float * __restrict__ src,
 //   TILE_SIZE_K            : reduction tile size along the K dimension.
 template <int BLOCK_DIM_X, int BLOCK_DIM_Y,
           int TILE_SIZE_Y, int TILE_SIZE_X, int TILE_SIZE_K>
-__global__ void matrixMulTiledRect_Revised(const float * __restrict__ A,
+__global__ void matrixMulTiledRect(const float * __restrict__ A,
                                            const float * __restrict__ B,
                                            float * __restrict__ C,
                                            int M, int N, int K)
