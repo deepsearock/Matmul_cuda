@@ -17,6 +17,9 @@
 #include <cuda_pipeline.h>  // May be required for __cp_async intrinsics.
 #include <cstdint>
 
+#include <cuda_pipeline.h>  // May be required for __cp_async intrinsics.
+#include <cstdint>
+
 template <int TILE_SIZE>
 __global__ void matrixMulTiled(const float * __restrict__ A,
                                    const float * __restrict__ B,
@@ -148,7 +151,10 @@ __global__ void matrixMulTiled(const float * __restrict__ A,
 }
 
 
-inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K, int tileSize) {
+
+
+//wrapper function that measures performance and does memory management
+inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tileSize) {
     float *d_A, *d_B, *d_C;
     float *h_A = new float[M * K];
     float *h_B = new float[K * N];
@@ -172,6 +178,55 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
         switch (tileSize) {
             case 16:
                 matrixMulTiled<16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                break;
+            case 32:
+                matrixMulTiled<32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                break;
+            case 64:
+                matrixMulTiled<64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                break;
+            default:
+                std::cerr << "Unsupported tile size" << std::endl;
+                exit(EXIT_FAILURE);
+        }
+    }, M, N, K);
+    //copy results back to host
+    cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    //free memory
+    freeDeviceMemory(d_A, d_B, d_C);
+    delete[] h_A;
+    delete[] h_B;
+    delete[] h_C;
+    delete[] h_C_ref;
+
+    return result;
+}
+
+inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, int K, int tileSize) {
+    float *d_A, *d_B, *d_C;
+    float *h_A = new float[M * K];
+    float *h_B = new float[K * N];
+    float *h_C = new float[M * N];
+    float *h_C_ref = new float[M * N];
+
+    //initialize host memory with random values
+    for (int i = 0; i < M * K; ++i) h_A[i] = static_cast<float>(rand()) / RAND_MAX;
+    for (int i = 0; i < K * N; ++i) h_B[i] = static_cast<float>(rand()) / RAND_MAX;
+
+    //allocate and copy memory to device
+    allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
+    cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
+
+    dim3 blockDim(tileSize, 256 / tileSize);
+    dim3 gridDim((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
+
+    //launch kernel using runtime determined grid and block sizes
+    auto result = measurePerformance([&]() {
+        switch (tileSize) {
+            case 16:
+                matrixMulTiled<16s><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 32:
                 matrixMulTiled<32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
