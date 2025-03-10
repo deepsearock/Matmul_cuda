@@ -441,40 +441,61 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     // --- Dynamically choose tile sizes and block dimensions ---
     // Here we dispatch three cases. For large matrices (e.g. 3000×4000, 100×10000)
     // we typically have M >= 64 and N >= 128.
-    int tileSizeY, tileSizeX, tileSizeK;
+    int tileSizeY, tileSizeX, tileSizeK = 16;
     int blockDimX, blockDimY;
-    if (M >= 64 && N >= 128 && K >= 16) {
-        // Large configuration.
-        tileSizeY = 64; tileSizeX = 128; tileSizeK = 16;
-        blockDimX = 16; // MICRO_TILE_COLS = 128/16 = 8 (allows vectorized loads)
-        blockDimY = 256 / blockDimX; // 256/16 = 16, so MICRO_TILE_ROWS = 64/16 = 4.
-    } else if (M >= 32 && N >= 64 && K >= 16) {
-        // Medium configuration.
-        tileSizeY = 32; tileSizeX = 64; tileSizeK = 16;
-        blockDimX = 8;  // MICRO_TILE_COLS = 64/8 = 8.
-        blockDimY = 256 / blockDimX; // 256/8 = 32.
+    const int threadsPerBlock = 256;
+
+    if (M >= 2 * N) {
+        // Tall output matrix: many more rows than columns.
+        // Favor more threads in the Y-dimension to cover extra rows.
+        blockDimX = 8;                     // Fewer threads along X.
+        blockDimY = threadsPerBlock / blockDimX; // 256/8 = 32 threads along Y.
+        tileSizeY = 64;                    // Tile covers more rows.
+        tileSizeX = 32;                    // Tile covers fewer columns.
+    } else if (N >= 2 * M) {
+        // Wide output matrix: many more columns than rows.
+        // Favor more threads in the X-dimension.
+        blockDimX = 32;                    // More threads along X.
+        blockDimY = threadsPerBlock / blockDimX; // 256/32 = 8 threads along Y.
+        tileSizeY = 32;                    // Tile covers fewer rows.
+        tileSizeX = 128;                   // Tile covers more columns.
     } else {
-        // Fallback configuration for smaller matrices.
-        tileSizeY = 16; tileSizeX = 32; tileSizeK = 16;
+        // Nearly square output matrix.
         blockDimX = 16;
-        blockDimY = 256 / blockDimX;
+        blockDimY = threadsPerBlock / blockDimX; // 256/16 = 16.
+        tileSizeY = 64;
+        tileSizeX = 64;
     }
+
+    // Verify that our chosen tile sizes are evenly divisible by the block dimensions.
+    // (i.e. MICRO_TILE_ROWS = tileSizeY / blockDimY and MICRO_TILE_COLS = tileSizeX / blockDimX)
+    // This is assumed by the kernel.
+    assert(tileSizeY % blockDimY == 0 && "tileSizeY must be divisible by blockDimY");
+    assert(tileSizeX % blockDimX == 0 && "tileSizeX must be divisible by blockDimX");
 
     dim3 blockDim(blockDimX, blockDimY);
     dim3 gridDim((N + tileSizeX - 1) / tileSizeX, (M + tileSizeY - 1) / tileSizeY);
 
-    //launch kernel using runtime determined grid and block sizes
+    // Launch the kernel using a configuration that matches the shape.
     auto result = measurePerformance([&]() {
-        if (tileSizeY == 64 && tileSizeX == 128 && tileSizeK == 16) {
-            matrixMulTiledRect<16, 16, 64, 128, 16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
-        } else if (tileSizeY == 32 && tileSizeX == 64 && tileSizeK == 16) {
-            matrixMulTiledRect<8, 32, 32, 64, 16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
-        } else if (tileSizeY == 16 && tileSizeX == 32 && tileSizeK == 16) {
-            matrixMulTiledRect<16, 16, 16, 32, 16><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+        if (M >= 2 * N) {
+            // Tall configuration: instantiate kernel with parameters:
+            // <BLOCK_DIM_X=8, BLOCK_DIM_Y=32, TILE_SIZE_Y=64, TILE_SIZE_X=32, TILE_SIZE_K=16>
+            matrixMulTiledRect<8, 32, 64, 32, 16>
+                <<<gridDim, blockDim, 0, stream>>>(d_A, d_B, d_C, M, N, K);
+        } else if (N >= 2 * M) {
+            // Wide configuration: instantiate kernel with parameters:
+            // <BLOCK_DIM_X=32, BLOCK_DIM_Y=8, TILE_SIZE_Y=32, TILE_SIZE_X=128, TILE_SIZE_K=16>
+            matrixMulTiledRect<32, 8, 32, 128, 16>
+                <<<gridDim, blockDim, 0, stream>>>(d_A, d_B, d_C, M, N, K);
         } else {
-            std::cerr << "Unsupported tile configuration" << std::endl;
-            exit(EXIT_FAILURE);
+            // Nearly square configuration: instantiate kernel with parameters:
+            // <BLOCK_DIM_X=16, BLOCK_DIM_Y=16, TILE_SIZE_Y=64, TILE_SIZE_X=64, TILE_SIZE_K=16>
+            matrixMulTiledRect<16, 16, 64, 64, 16>
+                <<<gridDim, blockDim, 0, stream>>>(d_A, d_B, d_C, M, N, K);
         }
+        // Synchronize to ensure the kernel finishes.
+        cudaStreamSynchronize(stream);
     }, M, N, K);
     //copy results back to host
     cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
