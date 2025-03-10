@@ -23,175 +23,139 @@ __global__ void matrixMulTiled(const float * __restrict__ A,
                                  float * __restrict__ C,
                                  int M, int N, int K)
 {
-    // Total threads per block and warps per block.
-    constexpr int THREADS_PER_BLOCK = BLOCK_DIM_X * BLOCK_DIM_Y;
-    constexpr int WARPS_PER_BLOCK = THREADS_PER_BLOCK / 32;
+    // Each block computes a TILE_SIZE x TILE_SIZE tile of C.
+    // Each thread computes a micro-tile of size:
+    constexpr int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y; // vertical sub-tile per thread
+    constexpr int MICRO_TILE_COLS = TILE_SIZE / BLOCK_DIM_X; // horizontal sub-tile per thread
 
-    // For both cases, we assume a warp grid of 2 rows.
-    // For TILE_SIZE==16 we want 4 warp columns (2x4 = 8 warps total).
-    constexpr int WARP_GRID_ROWS = 2;
-    constexpr int WARP_GRID_COLS = 4;
+    // Block and thread indices.
+    int bx = blockIdx.x, by = blockIdx.y;
+    int tx = threadIdx.x, ty = threadIdx.y;
 
-    if constexpr (TILE_SIZE == 16) {
-        // For 16x16 tile: set each warp’s internal layout to 8 rows x 4 cols.
-        constexpr int WARP_SUB_ROWS = 8;
-        constexpr int WARP_SUB_COLS = 4;
-        // Micro-tile per thread: each thread computes 1 element.
-        constexpr int MICRO_TILE_ROWS = TILE_SIZE / (WARP_GRID_ROWS * WARP_SUB_ROWS); // 16/(2*8)=1
-        constexpr int MICRO_TILE_COLS = TILE_SIZE / (WARP_GRID_COLS * WARP_SUB_COLS); // 16/(4*4)=1
+    // Top-left of the block-tile in global C.
+    int rowTile = by * TILE_SIZE;
+    int colTile = bx * TILE_SIZE;
 
-        // Compute the linear thread index.
-        int linearId = threadIdx.y * BLOCK_DIM_X + threadIdx.x;
-        int warpId = linearId / 32;   // 32 threads per warp.
-        int laneId = linearId % 32;
+    // Each thread’s computed sub-tile will be accumulated in registers.
+    float accum[MICRO_TILE_ROWS][MICRO_TILE_COLS] = {0.0f};
 
-        // Determine warp position in the block (2 warp rows x 4 warp columns).
-        int warpRow = warpId / WARP_GRID_COLS;
-        int warpCol = warpId % WARP_GRID_COLS;
+    // Shared memory tiles for A and B.
+    __shared__ float As[TILE_SIZE][TILE_SIZE];
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];
 
-        // Within a warp, each thread's lane is arranged in an 8 (rows) x 4 (cols) grid.
-        int laneRow = laneId / WARP_SUB_COLS; // 0..7
-        int laneCol = laneId % WARP_SUB_COLS; // 0..3
+    // Loop over tiles along the K-dimension.
+    int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
+    for (int t = 0; t < numTiles; t++) {
 
-        // Top-left of the tile in global C.
-        int rowTile = blockIdx.y * TILE_SIZE;
-        int colTile = blockIdx.x * TILE_SIZE;
-
-        // Each thread computes one output element.
-        int threadTileRow = rowTile + warpRow * (TILE_SIZE / WARP_GRID_ROWS) + laneRow * MICRO_TILE_ROWS;
-        int threadTileCol = colTile + warpCol * (TILE_SIZE / WARP_GRID_COLS) + laneCol * MICRO_TILE_COLS;
-
-        // Accumulator for the one output element.
-        float accum = 0.0f;
-
-        // Shared memory tiles for A and B.
-        __shared__ float As[TILE_SIZE][TILE_SIZE];
-        __shared__ float Bs[TILE_SIZE][TILE_SIZE];
-
-        // Number of tiles along the K-dimension.
-        int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
-        for (int t = 0; t < numTiles; t++) {
-            // --- Load tile of A into shared memory ---
-            // Here each thread loads one element.
-            int globalRowA = rowTile + warpRow * (TILE_SIZE / WARP_GRID_ROWS) + laneRow;
-            int globalColA = t * TILE_SIZE + warpCol * (TILE_SIZE / WARP_GRID_COLS) + laneCol;
-            int sharedRowA = warpRow * (TILE_SIZE / WARP_GRID_ROWS) + laneRow;
-            int sharedColA = warpCol * (TILE_SIZE / WARP_GRID_COLS) + laneCol;
-            if (globalRowA < M && globalColA < K)
-                As[sharedRowA][sharedColA] = A[globalRowA * K + globalColA];
-            else
-                As[sharedRowA][sharedColA] = 0.0f;
-
-            // --- Load tile of B into shared memory ---
-            int globalRowB = t * TILE_SIZE + warpRow * (TILE_SIZE / WARP_GRID_ROWS) + laneRow;
-            int globalColB = colTile + warpCol * (TILE_SIZE / WARP_GRID_COLS) + laneCol;
-            int sharedRowB = warpRow * (TILE_SIZE / WARP_GRID_ROWS) + laneRow;
-            int sharedColB = warpCol * (TILE_SIZE / WARP_GRID_COLS) + laneCol;
-            if (globalRowB < K && globalColB < N)
-                Bs[sharedRowB][sharedColB] = B[globalRowB * N + globalColB];
-            else
-                Bs[sharedRowB][sharedColB] = 0.0f;
-
-            __syncthreads(); // Ensure full tile loaded.
-
-            // --- Multiply the tile ---
-            for (int k = 0; k < TILE_SIZE; k++) {
-                // Each thread multiplies one element from A row with one element from B column.
-                accum = __fmaf_rn(As[warpRow * (TILE_SIZE / WARP_GRID_ROWS) + laneRow][k],
-                                  Bs[k][warpCol * (TILE_SIZE / WARP_GRID_COLS) + laneCol],
-                                  accum);
+        // --- Load tile of A into shared memory ---
+        // Each thread loads a MICRO_TILE_ROWS x MICRO_TILE_COLS sub-tile from A.
+        // Compute whether the A tile is fully inside (so we can use a vectorized load).
+        bool fullTileA = ((rowTile + ty * MICRO_TILE_ROWS + MICRO_TILE_ROWS) <= M) &&
+                         ((t * TILE_SIZE + tx * MICRO_TILE_COLS + MICRO_TILE_COLS) <= K);
+        if (fullTileA && (MICRO_TILE_COLS % 2 == 0)) {
+            // Fast (vectorized) load path.
+            typedef float2 Vec;
+            constexpr int vecWidth = 2; // number of floats per vector load
+            int numVecs = MICRO_TILE_COLS / vecWidth;
+            #pragma unroll
+            for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+                // Global row index for A.
+                int globalRow = rowTile + ty * MICRO_TILE_ROWS + i;
+                // Starting column within the tile for this thread.
+                int aColStart = t * TILE_SIZE + tx * MICRO_TILE_COLS;
+                // Reinterpret the A pointer as a vector pointer.
+                const Vec* aVecPtr = reinterpret_cast<const Vec*>(&A[globalRow * K + aColStart]);
+                #pragma unroll
+                for (int v = 0; v < numVecs; v++) {
+                    Vec vecVal = aVecPtr[v];
+                    // Write into shared memory at row (ty*MICRO_TILE_ROWS + i) and the appropriate columns.
+                    int colIndex = tx * MICRO_TILE_COLS + v * vecWidth;
+                    As[ty * MICRO_TILE_ROWS + i][colIndex]     = vecVal.x;
+                    As[ty * MICRO_TILE_ROWS + i][colIndex + 1] = vecVal.y;
+                }
             }
-            __syncthreads(); // Prepare for next tile.
+        } else {
+            // Slow (scalar) load path with bounds checking.
+            #pragma unroll
+            for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+                int globalRow = rowTile + ty * MICRO_TILE_ROWS + i;
+                int aColStart = t * TILE_SIZE + tx * MICRO_TILE_COLS;
+                #pragma unroll
+                for (int j = 0; j < MICRO_TILE_COLS; j++) {
+                    int globalCol = aColStart + j;
+                    if (globalRow < M && globalCol < K)
+                        As[ty * MICRO_TILE_ROWS + i][tx * MICRO_TILE_COLS + j] = A[globalRow * K + globalCol];
+                    else
+                        As[ty * MICRO_TILE_ROWS + i][tx * MICRO_TILE_COLS + j] = 0.0f;
+                }
+            }
         }
 
-        // --- Write the computed element back to global memory ---
-        if (threadTileRow < M && threadTileCol < N)
-            C[threadTileRow * N + threadTileCol] = accum;
+        // --- Load tile of B into shared memory ---
+        // Each thread loads a MICRO_TILE_ROWS x MICRO_TILE_COLS sub-tile from B.
+        bool fullTileB = ((t * TILE_SIZE + ty * MICRO_TILE_ROWS + MICRO_TILE_ROWS) <= K) &&
+                         ((colTile + tx * MICRO_TILE_COLS + MICRO_TILE_COLS) <= N);
+        if (fullTileB && (MICRO_TILE_COLS % 2 == 0)) {
+            typedef float2 Vec;
+            constexpr int vecWidth = 2;
+            int numVecs = MICRO_TILE_COLS / vecWidth;
+            #pragma unroll
+            for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+                int globalRow = t * TILE_SIZE + ty * MICRO_TILE_ROWS + i;
+                int bColStart = colTile + tx * MICRO_TILE_COLS;
+                const Vec* bVecPtr = reinterpret_cast<const Vec*>(&B[globalRow * N + bColStart]);
+                #pragma unroll
+                for (int v = 0; v < numVecs; v++) {
+                    Vec vecVal = bVecPtr[v];
+                    int colIndex = tx * MICRO_TILE_COLS + v * vecWidth;
+                    Bs[ty * MICRO_TILE_ROWS + i][colIndex]     = vecVal.x;
+                    Bs[ty * MICRO_TILE_ROWS + i][colIndex + 1] = vecVal.y;
+                }
+            }
+        } else {
+            #pragma unroll
+            for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+                int globalRow = t * TILE_SIZE + ty * MICRO_TILE_ROWS + i;
+                int bColStart = colTile + tx * MICRO_TILE_COLS;
+                #pragma unroll
+                for (int j = 0; j < MICRO_TILE_COLS; j++) {
+                    int globalCol = bColStart + j;
+                    if (globalRow < K && globalCol < N)
+                        Bs[ty * MICRO_TILE_ROWS + i][tx * MICRO_TILE_COLS + j] = B[globalRow * N + globalCol];
+                    else
+                        Bs[ty * MICRO_TILE_ROWS + i][tx * MICRO_TILE_COLS + j] = 0.0f;
+                }
+            }
+        }
+
+        __syncthreads(); // Ensure the full tile is loaded before computation
+
+        // --- Multiply the two tiles ---
+        // Each thread multiplies the row(s) of As with the column(s) of Bs and accumulates into its micro tile.
+        #pragma unroll
+        for (int k = 0; k < TILE_SIZE; k++) {
+            #pragma unroll
+            for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+                float aVal = As[ty * MICRO_TILE_ROWS + i][k];
+                #pragma unroll
+                for (int j = 0; j < MICRO_TILE_COLS; j++) {
+                    accum[i][j] = __fmaf_rn(aVal, Bs[k][tx * MICRO_TILE_COLS + j], accum[i][j]);
+                }
+            }
+        }
+
+        __syncthreads(); // Prepare for the next tile
     }
-    else {
-        // Default path for TILE_SIZE not equal to 16.
-        // Here we use the original warp tiling parameters: 2 warp rows x 4 warp columns
-        // with each warp internally arranged as 4 rows x 8 cols.
-        constexpr int WARP_SUB_ROWS = 2;
-        constexpr int WARP_SUB_COLS = 16;
-        constexpr int MICRO_TILE_ROWS = TILE_SIZE / (WARP_GRID_ROWS * WARP_SUB_ROWS);
-        constexpr int MICRO_TILE_COLS = TILE_SIZE / (WARP_GRID_COLS * WARP_SUB_COLS);
 
-        int linearId = threadIdx.y * BLOCK_DIM_X + threadIdx.x;
-        int warpId = linearId / 32;
-        int laneId = linearId % 32;
-
-        int warpRow = warpId / WARP_GRID_COLS;
-        int warpCol = warpId % WARP_GRID_COLS;
-
-        int laneRow = laneId / WARP_SUB_COLS;
-        int laneCol = laneId % WARP_SUB_COLS;
-
-        int rowTile = blockIdx.y * TILE_SIZE;
-        int colTile = blockIdx.x * TILE_SIZE;
-
-        int threadTileRow = rowTile + warpRow * (TILE_SIZE / WARP_GRID_ROWS) + laneRow * MICRO_TILE_ROWS;
-        int threadTileCol = colTile + warpCol * (TILE_SIZE / WARP_GRID_COLS) + laneCol * MICRO_TILE_COLS;
-
-        float accum[MICRO_TILE_ROWS][MICRO_TILE_COLS] = {0.0f};
-
-        __shared__ float As[TILE_SIZE][TILE_SIZE];
-        __shared__ float Bs[TILE_SIZE][TILE_SIZE];
-
-        int numTiles = (K + TILE_SIZE - 1) / TILE_SIZE;
-        for (int t = 0; t < numTiles; t++) {
-            // --- Load A into shared memory ---
-            for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-                int globalRowA = rowTile + warpRow * (TILE_SIZE / WARP_GRID_ROWS) + laneRow * MICRO_TILE_ROWS + i;
-                int aColStart = t * TILE_SIZE + warpCol * (TILE_SIZE / WARP_GRID_COLS) + laneCol * MICRO_TILE_COLS;
-                for (int j = 0; j < MICRO_TILE_COLS; j++) {
-                    int globalColA = aColStart + j;
-                    int sharedRow = warpRow * (TILE_SIZE / WARP_GRID_ROWS) + laneRow * MICRO_TILE_ROWS + i;
-                    int sharedCol = warpCol * (TILE_SIZE / WARP_GRID_COLS) + laneCol * MICRO_TILE_COLS + j;
-                    if (globalRowA < M && globalColA < K)
-                        As[sharedRow][sharedCol] = A[globalRowA * K + globalColA];
-                    else
-                        As[sharedRow][sharedCol] = 0.0f;
-                }
-            }
-            // --- Load B into shared memory ---
-            for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-                int globalRowB = t * TILE_SIZE + warpRow * (TILE_SIZE / WARP_GRID_ROWS) + laneRow * MICRO_TILE_ROWS + i;
-                int bColStart = colTile + warpCol * (TILE_SIZE / WARP_GRID_COLS) + laneCol * MICRO_TILE_COLS;
-                for (int j = 0; j < MICRO_TILE_COLS; j++) {
-                    int globalColB = bColStart + j;
-                    int sharedRow = warpRow * (TILE_SIZE / WARP_GRID_ROWS) + laneRow * MICRO_TILE_ROWS + i;
-                    int sharedCol = warpCol * (TILE_SIZE / WARP_GRID_COLS) + laneCol * MICRO_TILE_COLS + j;
-                    if (globalRowB < K && globalColB < N)
-                        Bs[sharedRow][sharedCol] = B[globalRowB * N + globalColB];
-                    else
-                        Bs[sharedRow][sharedCol] = 0.0f;
-                }
-            }
-            __syncthreads();
-
-            // --- Multiply the tiles ---
-            for (int k = 0; k < TILE_SIZE; k++) {
-                for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-                    int a_shared_row = warpRow * (TILE_SIZE / WARP_GRID_ROWS) + laneRow * MICRO_TILE_ROWS + i;
-                    float aVal = As[a_shared_row][k];
-                    for (int j = 0; j < MICRO_TILE_COLS; j++) {
-                        int b_shared_col = warpCol * (TILE_SIZE / WARP_GRID_COLS) + laneCol * MICRO_TILE_COLS + j;
-                        accum[i][j] = __fmaf_rn(aVal, Bs[k][b_shared_col], accum[i][j]);
-                    }
-                }
-            }
-            __syncthreads();
-        }
-
-        // --- Write the results back ---
-        for (int i = 0; i < MICRO_TILE_ROWS; i++) {
-            int globalRow = threadTileRow + i;
-            for (int j = 0; j < MICRO_TILE_COLS; j++) {
-                int globalCol = threadTileCol + j;
-                if (globalRow < M && globalCol < N)
-                    C[globalRow * N + globalCol] = accum[i][j];
-            }
+    // --- Write the accumulated sub-tile back to global memory ---
+    #pragma unroll
+    for (int i = 0; i < MICRO_TILE_ROWS; i++) {
+        int globalRow = rowTile + ty * MICRO_TILE_ROWS + i;
+        #pragma unroll
+        for (int j = 0; j < MICRO_TILE_COLS; j++) {
+            int globalCol = colTile + tx * MICRO_TILE_COLS + j;
+            if (globalRow < M && globalCol < N)
+                C[globalRow * N + globalCol] = accum[i][j];
         }
     }
 }
