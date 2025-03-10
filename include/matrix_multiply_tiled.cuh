@@ -8,6 +8,7 @@
 #include <cmath>
 #include <algorithm>
 #include "utils.cuh"
+#include <cassert>
 
 // Optimized Tiled Matrix Multiplication Kernel
 // TILE_SIZE is a compile-time parameter.
