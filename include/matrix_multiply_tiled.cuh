@@ -112,8 +112,8 @@ __global__ void matrixMulTiled(const float * __restrict__ A,
         // Default path for TILE_SIZE not equal to 16.
         // Here we use the original warp tiling parameters: 2 warp rows x 4 warp columns
         // with each warp internally arranged as 4 rows x 8 cols.
-        constexpr int WARP_SUB_ROWS = 8;
-        constexpr int WARP_SUB_COLS = 4;
+        constexpr int WARP_SUB_ROWS = 16;
+        constexpr int WARP_SUB_COLS = 2;
         constexpr int MICRO_TILE_ROWS = TILE_SIZE / (WARP_GRID_ROWS * WARP_SUB_ROWS);
         constexpr int MICRO_TILE_COLS = TILE_SIZE / (WARP_GRID_COLS * WARP_SUB_COLS);
 
