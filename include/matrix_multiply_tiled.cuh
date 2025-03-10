@@ -380,12 +380,36 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     for (int i = 0; i < K * N; ++i) h_B[i] = static_cast<float>(rand()) / RAND_MAX;
 
     //allocate and copy memory to device
+    // Allocate and copy device memory.
+    float *d_A, *d_B, *d_C;
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
     cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
-    dim3 blockDim(tileSize, 256 / tileSize);
-    dim3 gridDim((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize);
+    // --- Dynamically choose tile sizes and block dimensions ---
+    // Here we dispatch three cases. For large matrices (e.g. 3000×4000, 100×10000)
+    // we typically have M >= 64 and N >= 128.
+    int tileSizeY, tileSizeX, tileSizeK;
+    int blockDimX, blockDimY;
+    if (M >= 64 && N >= 128 && K >= 16) {
+        // Large configuration.
+        tileSizeY = 64; tileSizeX = 128; tileSizeK = 16;
+        blockDimX = 16; // MICRO_TILE_COLS = 128/16 = 8 (allows vectorized loads)
+        blockDimY = 256 / blockDimX; // 256/16 = 16, so MICRO_TILE_ROWS = 64/16 = 4.
+    } else if (M >= 32 && N >= 64 && K >= 16) {
+        // Medium configuration.
+        tileSizeY = 32; tileSizeX = 64; tileSizeK = 16;
+        blockDimX = 8;  // MICRO_TILE_COLS = 64/8 = 8.
+        blockDimY = 256 / blockDimX; // 256/8 = 32.
+    } else {
+        // Fallback configuration for smaller matrices.
+        tileSizeY = 16; tileSizeX = 32; tileSizeK = 16;
+        blockDimX = 16;
+        blockDimY = 256 / blockDimX;
+    }
+
+    dim3 blockDim(blockDimX, blockDimY);
+    dim3 gridDim((N + tileSizeX - 1) / tileSizeX, (M + tileSizeY - 1) / tileSizeY);
 
     //launch kernel using runtime determined grid and block sizes
     auto result = measurePerformance([&]() {
