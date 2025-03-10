@@ -343,7 +343,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K) {
     if (M >= 64 && N >= 128 && K >= 16) {
         // Large configuration.
         tileSizeY = 64; tileSizeX = 128; tileSizeK = 16;
-        blockDimX = 16; // MICRO_TILE_COLS = 128/16 = 8 (allows vectorized loads)
+        blockDimX = 4; // MICRO_TILE_COLS = 128/16 = 8 (allows vectorized loads)
         blockDimY = 256 / blockDimX; // 256/16 = 16, so MICRO_TILE_ROWS = 64/16 = 4.
     } else if (M >= 32 && N >= 64 && K >= 16) {
         // Medium configuration.
