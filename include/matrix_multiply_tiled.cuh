@@ -434,9 +434,13 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
 
     //allocate and copy memory to device
     // Allocate and copy device memory.
-    allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
-    cudaMemcpy(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice);
+    // Create a CUDA stream.
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+
+    // Asynchronously copy data to the device.
+    cudaMemcpyAsync(d_A, h_A, M * K * sizeof(float), cudaMemcpyHostToDevice, stream);
+    cudaMemcpyAsync(d_B, h_B, K * N * sizeof(float), cudaMemcpyHostToDevice, stream);
 
     // --- Dynamically choose tile sizes and block dimensions ---
     // Here we dispatch three cases. For large matrices (e.g. 3000×4000, 100×10000)
@@ -498,7 +502,8 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
         cudaStreamSynchronize(stream);
     }, M, N, K);
     //copy results back to host
-    cudaMemcpy(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpyAsync(h_C, d_C, M * N * sizeof(float), cudaMemcpyDeviceToHost, stream);
+    cudaStreamSynchronize(stream); // Wait for all operations to complete.
 
     //compute cpu reference result
     matrixMulCPU(h_A, h_B, h_C_ref, M, N, K);
@@ -523,6 +528,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     std::cout << "Max Absolute Error: " << max_error << std::endl;
 
     //free memory
+    cudaStreamDestroy(stream);
     freeDeviceMemory(d_A, d_B, d_C);
     delete[] h_A;
     delete[] h_B;
