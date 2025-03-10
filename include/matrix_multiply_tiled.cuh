@@ -78,7 +78,7 @@ template <int BLOCK_DIM_X,
           int TILE_SIZE_X,
           int TILE_SIZE_K>
 __global__
-void matrixMulTiledRect(const float* __restrict__ A,
+void matrixMulTiledRect_fixed(const float* __restrict__ A,
                               const float* __restrict__ B,
                               float*       __restrict__ C,
                               int M, int N, int K)
@@ -229,6 +229,7 @@ void matrixMulTiledRect(const float* __restrict__ A,
         }
     }
 }
+
 
 
 
