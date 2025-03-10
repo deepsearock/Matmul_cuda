@@ -26,7 +26,7 @@ __global__ void matrixMulTiled(const float * __restrict__ A,
     // Each block computes a TILE_SIZE x TILE_SIZE tile of C.
     // Each thread computes a micro-tile of size:
     constexpr int MICRO_TILE_ROWS = TILE_SIZE / BLOCK_DIM_Y; // vertical sub-tile per thread
-    constexpr int MICRO_TILE_COLS = 2*TILE_SIZE / BLOCK_DIM_X; // horizontal sub-tile per thread
+    constexpr int MICRO_TILE_COLS = TILE_SIZE / BLOCK_DIM_X; // horizontal sub-tile per thread
 
     // Block and thread indices.
     int bx = blockIdx.x, by = blockIdx.y;
@@ -192,7 +192,7 @@ inline std::pair<double, double> runMatrixMulTiled(int M, int N, int K, int tile
                 matrixMulTiled<32, 8, 32><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             case 64:
-                matrixMulTiled<64, 4, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
+                matrixMulTiled<32, 4, 64><<<gridDim, blockDim>>>(d_A, d_B, d_C, M, N, K);
                 break;
             default:
                 std::cerr << "Unsupported tile size" << std::endl;
