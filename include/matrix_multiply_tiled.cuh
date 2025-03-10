@@ -106,8 +106,8 @@ void matrixMulTiledRect(const float* __restrict__ A,
     int colTile = bx * TILE_SIZE_X;
 
     // Shared memory
-    __shared__ float As[TILE_SIZE_Y][TILE_SIZE_K + 1];
-    __shared__ float Bs[TILE_SIZE_K][TILE_SIZE_X + 1];
+    __shared__ float As[TILE_SIZE_Y][TILE_SIZE_K ];
+    __shared__ float Bs[TILE_SIZE_K][TILE_SIZE_X ];
 
     // Each thread accumulates a micro-tile of C in registers
     float accum[MICRO_TILE_ROWS][MICRO_TILE_COLS] = {0.0f};
