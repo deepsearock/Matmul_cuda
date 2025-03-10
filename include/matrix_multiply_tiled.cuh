@@ -92,9 +92,9 @@ __global__ void matrixMulTiledRect(const float * __restrict__ A,
 
     // Shared memory allocations.
     // For A: a tile of size [TILE_SIZE_Y][TILE_SIZE_K] (+1 padding in the K dimension).
-    __shared__ float As[TILE_SIZE_Y][TILE_SIZE_K];
+    __shared__ float As[TILE_SIZE_Y][TILE_SIZE_K + 1];
     // For B: a tile of size [TILE_SIZE_K][TILE_SIZE_X] (+1 padding in the X dimension).
-    __shared__ float Bs[TILE_SIZE_K][TILE_SIZE_X];
+    __shared__ float Bs[TILE_SIZE_K][TILE_SIZE_X + 1];
 
     // Each thread accumulates a micro-tile of C in registers.
     float accum[MICRO_TILE_ROWS][MICRO_TILE_COLS] = {0.0f};
@@ -433,7 +433,7 @@ inline std::pair<double, double> runMatrixMulTiledWithErrorCheck(int M, int N, i
     for (int i = 0; i < K * N; ++i) h_B[i] = static_cast<float>(rand()) / RAND_MAX;
 
     //allocate and copy memory to device
-    // Allocate and copy device memory.`
+    // Allocate and copy device memory.
     allocateDeviceMemory(&d_A, &d_B, &d_C, M, N, K);
     // Create a CUDA stream.
     cudaStream_t stream;
