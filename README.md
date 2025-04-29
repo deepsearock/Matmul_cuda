@@ -1,4 +1,4 @@
-# cs811_lab1
+# matrix multiplication in cuda
 cs811_lab1
 Matrix multiplication with arbitrary size in cuda
 
