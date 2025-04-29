@@ -1,9 +1,4 @@
-Lab1: matmul
-
-Zhaorui Wang
-cwid: 20007447
-
-The lab and spreadsheet with some data is in here aswell as groovy extension program with some pseudo code for questions in assignment
+Matrix multiplication with arbitrary size in cuda
 
 In order to build you must run
 
