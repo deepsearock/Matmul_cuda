@@ -1,5 +1,4 @@
-//doesnt have to be groovy but this was easy to read
-//question 5
+
 for (int i = 0; i < round(N/T); i++) {
     for (int j = 0; j < round(N/T); j++) {
         //each block computes a c tile
@@ -17,7 +16,6 @@ for (int i = 0; i < round(N/T); i++) {
     }
 }
 
-//question 6
 for (int i = 0; i < round(N/B); i++) {
     for (int j = 0; j < round(N/B); j++) {
         //each block computes a C block
